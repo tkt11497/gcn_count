@@ -76,7 +76,7 @@ const get_comments = async (video_id) => {
 }
 async function connectFacebook() {
   const { longLivedUserAccessToken,longLivedUserExpiresIn, pages } = await getLongLivedUserAndPageTokens({
-    appId: '765691559587440',
+    appId: '1536771847503313',
     scopes: [
       'pages_show_list',
       'pages_read_engagement',
