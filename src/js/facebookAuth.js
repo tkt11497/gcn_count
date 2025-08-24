@@ -298,10 +298,12 @@ export async function getPageInsights(pageId, pageAccessToken) {
 export async function getLiveVideoData(pageId, pageAccessToken) {
   try {
     // Try to get live videos (this might fail without app review)
+    //const res=await fetch(`https://graph.facebook.com/v20.0/${page_id}/live_videos?fields=id,status,stream_url&access_token=${page_token}`)
     const liveVideosUrl = `https://graph.facebook.com/v23.0/${pageId}/live_videos`;
     const liveParams = new URLSearchParams({
       access_token: pageAccessToken,
-      fields: 'id,title,status,viewer_count,creation_time'
+      //fields: 'id,title,status,viewer_count,creation_time'
+      fields: 'id,status,stream_url,title,viewer_count,creation_time'
     });
 
     const liveResponse = await fetch(`${liveVideosUrl}?${liveParams.toString()}`);
@@ -325,17 +327,17 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
     }
     
     // Fallback: check posts for live status
-    const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
+    // const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
     
-    if (liveStatus.isLive) {
-      return {
-        isLive: true,
-        viewerCount: 'Live (exact count requires app review)',
-        videoId: liveStatus.livePosts[0]?.id,
-        title: 'Live Video',
-        startTime: liveStatus.livePosts[0]?.created_time
-      };
-    }
+    // if (liveStatus.isLive) {
+    //   return {
+    //     isLive: true,
+    //     viewerCount: 'Live (exact count requires app review)',
+    //     videoId: liveStatus.livePosts[0]?.id,
+    //     title: 'Live Video',
+    //     startTime: liveStatus.livePosts[0]?.created_time
+    //   };
+    // }
     
     return {
       isLive: false,
@@ -348,26 +350,26 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
   } catch (error) {
     console.error('Error getting live video data:', error);
     // Fallback to posts method
-    try {
-      const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
-      return {
-        isLive: liveStatus.isLive,
-        viewerCount: liveStatus.isLive ? 'Live (approximate)' : 0,
-        videoId: liveStatus.livePosts[0]?.id,
-        title: 'Live Video',
-        startTime: liveStatus.livePosts[0]?.created_time
-      };
-    } catch (fallbackError) {
-      console.error('Fallback method also failed:', fallbackError);
-      return {
-        isLive: false,
-        viewerCount: 0,
-        videoId: null,
-        title: null,
-        startTime: null,
-        error: error.message
-      };
-    }
+    // try {
+    //   const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
+    //   return {
+    //     isLive: liveStatus.isLive,
+    //     viewerCount: liveStatus.isLive ? 'Live (approximate)' : 0,
+    //     videoId: liveStatus.livePosts[0]?.id,
+    //     title: 'Live Video',
+    //     startTime: liveStatus.livePosts[0]?.created_time
+    //   };
+    // } catch (fallbackError) {
+    //   console.error('Fallback method also failed:', fallbackError);
+    //   return {
+    //     isLive: false,
+    //     viewerCount: 0,
+    //     videoId: null,
+    //     title: null,
+    //     startTime: null,
+    //     error: error.message
+    //   };
+    // }
   }
 } 
 

@@ -193,10 +193,10 @@ let refreshInterval = null
 
 onMounted(() => {
   // Initial refresh after 2 seconds
-  // setTimeout(autoRefreshAllPages, 2000)
+  setTimeout(autoRefreshAllPages, 2000)
   
   // // Set up interval for auto-refresh
-  // refreshInterval = setInterval(autoRefreshAllPages, 30000) // 30 seconds
+  refreshInterval = setInterval(autoRefreshAllPages, 30000) // 30 seconds
 })
 
 // Clean up interval on unmount
