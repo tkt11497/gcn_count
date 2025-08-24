@@ -18,7 +18,7 @@ export const useStoreAuth = defineStore('storeAuth', {
           this.user.email = user.email
           console.log('user logged in init')
           if(this.router.currentRoute.value.path === '/auth') {
-            this.router.push('/')
+            this.router.push('/notes')
           }
           storeNotes.getNotes_subscribe()
           // this.router.push('/')

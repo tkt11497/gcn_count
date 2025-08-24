@@ -7,7 +7,7 @@
     <div class="container is-max-desktop px-2">
       <div class="navbar-brand">
         <div class="navbar-item is-size-4 is-family-monospace">
-          <RouterLink to="/" style="text-decoration: none;color:#fff">Registered Pages</RouterLink>
+          <RouterLink to="/notes" style="text-decoration: none;color:#fff">Registered Pages</RouterLink>
         </div>
 
         <a

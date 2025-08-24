@@ -10,6 +10,11 @@ import { useStoreAuth } from '@/stores/storeAuth'
 const routes = [
   {
     path: '/',
+    name: 'gcn_register',
+    component: gcn_register
+  },
+  {
+    path: '/notes',
     name: 'notes',
     component: ViewNotes
   },
