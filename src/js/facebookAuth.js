@@ -167,12 +167,27 @@ export function loadFacebookSDK(appId) {
     if (!data || !data.access_token) throw new Error('Invalid exchange response')
     return data
   }
-  export async function exchangeForLongLivedUserTokenWtihoutBackend(shortLivedUserToken) {
-    const appId = '765691559587440'
-    const clientSecret = '4bb914ca679d5682473a50f3d6ffd874'
-    const res = await fetch(`https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${clientSecret}&fb_exchange_token=${shortLivedUserToken}`)
+  export async function exchangeForLongLivedUserTokenViaFirebase(shortLivedUserToken) {
+    // Get the Firebase Functions URL - you'll need to replace this with your actual function URL after deployment
+    const functionUrl = 'https://exchangefacebooktoken-iue46n3ata-uc.a.run.app'
+    
+    const res = await fetch(functionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shortLivedUserToken })
+    })
+    
+    if (!res.ok) {
+      let message = `Exchange error ${res.status}`
+      try {
+        const err = await res.json()
+        if (err && err.error) message += `: ${err.error}`
+      } catch (_) {}
+      throw new Error(message)
+    }
+    
     const data = await res.json()
-    console.log(data,'data233')
+    console.log('Token exchange response:', data)
     return data
   }
   
@@ -183,9 +198,13 @@ export function loadFacebookSDK(appId) {
   
     const shortUserToken = await loginAndGetUserAccessToken(scopes)
     // const exchange = await exchangeForLongLivedUserTokenViaBackend(shortUserToken, { endpoint: exchangeEndpoint })
-    console.log(shortUserToken,'shortUserToken')
-    const exchange = await exchangeForLongLivedUserTokenWtihoutBackend(shortUserToken)
-    console.log(exchange,'exchange')
+    //console.log(shortUserToken,'shortUserToken')
+    // const exchange = await exchangeForLongLivedUserTokenWtihoutBackend(shortUserToken)
+    console.log('Short-lived token:', shortUserToken)
+    
+    // Use the secure Firebase Function for token exchange
+    const exchange = await exchangeForLongLivedUserTokenViaFirebase(shortUserToken)
+    console.log('Long-lived token exchange:', exchange)
     persistToken({ kind: 'user_long_lived', token: exchange.access_token, expiresInSeconds: exchange.expires_in })
   
     const pages = await getPageAccessTokens(exchange.access_token)
@@ -217,3 +236,5 @@ export function loadFacebookSDK(appId) {
     persistToken({ kind: `page_${pageId}`, token })
     return token
   } 
+
+ 

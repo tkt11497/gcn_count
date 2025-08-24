@@ -1,5 +1,5 @@
 <template>
-    <h1>hello world</h1>
+    <h1>Please Login and allow permission to continue</h1>
 </template>
 <script setup>
 import { ref,computed,watch,useTemplateRef } from 'vue'

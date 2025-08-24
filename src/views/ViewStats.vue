@@ -9,13 +9,13 @@
       </thead>
       <tbody>
         <tr>
-          <td>Number of Links</td>
+          <td>Number of Registered Pages</td>
           <td>{{ storeNotes.totalNotesCount }}</td>
         </tr>
-        <tr>
+        <!-- <tr>
           <td>Number of Characters (of all notes)</td>
           <td>{{ storeNotes.totalCharactersCount }}</td>
-        </tr>
+        </tr> -->
       </tbody>
     </table>
 
