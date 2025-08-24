@@ -238,3 +238,137 @@ export function loadFacebookSDK(appId) {
   } 
 
  
+export async function getPageLiveStatus(pageId, pageAccessToken) {
+  try {
+    // Get page posts to check for live status
+    const postsUrl = `https://graph.facebook.com/v23.0/${pageId}/posts`;
+    const postsParams = new URLSearchParams({
+      access_token: pageAccessToken,
+      fields: 'id,message,created_time,type,status_type,insights.metric(video_views)',
+      limit: 10
+    });
+
+    const postsResponse = await fetch(`${postsUrl}?${postsParams.toString()}`);
+    if (!postsResponse.ok) {
+      throw new Error(`Failed to get page posts: ${postsResponse.status}`);
+    }
+
+    const postsData = await postsResponse.json();
+    const posts = postsData.data || [];
+
+    // Look for live video posts
+    const livePosts = posts.filter(post => 
+      post.type === 'video' && 
+      post.status_type === 'live_video'
+    );
+
+    return {
+      isLive: livePosts.length > 0,
+      livePosts: livePosts,
+      totalPosts: posts.length
+    };
+  } catch (error) {
+    console.error('Error getting page live status:', error);
+    throw error;
+  }
+}
+
+export async function getPageInsights(pageId, pageAccessToken) {
+  try {
+    const insightsUrl = `https://graph.facebook.com/v23.0/${pageId}/insights`;
+    const params = new URLSearchParams({
+      access_token: pageAccessToken,
+      metric: 'page_views_total,page_fans,page_fan_adds',
+      period: 'day'
+    });
+
+    const response = await fetch(`${insightsUrl}?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`Failed to get page insights: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Error getting page insights:', error);
+    throw error;
+  }
+}
+
+export async function getLiveVideoData(pageId, pageAccessToken) {
+  try {
+    // Try to get live videos (this might fail without app review)
+    const liveVideosUrl = `https://graph.facebook.com/v23.0/${pageId}/live_videos`;
+    const liveParams = new URLSearchParams({
+      access_token: pageAccessToken,
+      fields: 'id,title,status,viewer_count,creation_time'
+    });
+
+    const liveResponse = await fetch(`${liveVideosUrl}?${liveParams.toString()}`);
+    
+    if (liveResponse.ok) {
+      const liveData = await liveResponse.json();
+      const liveVideos = liveData.data || [];
+      
+      // Find active live video
+      const activeLive = liveVideos.find(video => video.status === 'LIVE');
+      
+      if (activeLive) {
+        return {
+          isLive: true,
+          viewerCount: activeLive.viewer_count || 0,
+          videoId: activeLive.id,
+          title: activeLive.title,
+          startTime: activeLive.creation_time
+        };
+      }
+    }
+    
+    // Fallback: check posts for live status
+    const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
+    
+    if (liveStatus.isLive) {
+      return {
+        isLive: true,
+        viewerCount: 'Live (exact count requires app review)',
+        videoId: liveStatus.livePosts[0]?.id,
+        title: 'Live Video',
+        startTime: liveStatus.livePosts[0]?.created_time
+      };
+    }
+    
+    return {
+      isLive: false,
+      viewerCount: 0,
+      videoId: null,
+      title: null,
+      startTime: null
+    };
+    
+  } catch (error) {
+    console.error('Error getting live video data:', error);
+    // Fallback to posts method
+    try {
+      const liveStatus = await getPageLiveStatus(pageId, pageAccessToken);
+      return {
+        isLive: liveStatus.isLive,
+        viewerCount: liveStatus.isLive ? 'Live (approximate)' : 0,
+        videoId: liveStatus.livePosts[0]?.id,
+        title: 'Live Video',
+        startTime: liveStatus.livePosts[0]?.created_time
+      };
+    } catch (fallbackError) {
+      console.error('Fallback method also failed:', fallbackError);
+      return {
+        isLive: false,
+        viewerCount: 0,
+        videoId: null,
+        title: null,
+        startTime: null,
+        error: error.message
+      };
+    }
+  }
+} 
+
+ 
