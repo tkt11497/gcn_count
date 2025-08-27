@@ -119,9 +119,10 @@ connectFacebook()
 </script>
 
 <style lang="css" scoped>
+/* Dark Theme Styles */
 .privacy-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   padding: 20px;
   display: flex;
   justify-content: center;
@@ -130,13 +131,14 @@ connectFacebook()
 }
 
 .privacy-card {
-  background: white;
+  background: #1e1e2e;
   border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   padding: 40px;
   max-width: 800px;
   width: 100%;
   animation: slideIn 0.6s ease-out;
+  border: 1px solid #2d2d3f;
 }
 
 @keyframes slideIn {
@@ -154,7 +156,7 @@ connectFacebook()
   text-align: center;
   margin-bottom: 40px;
   padding-bottom: 30px;
-  border-bottom: 2px solid #f0f0f0;
+  border-bottom: 2px solid #2d2d3f;
 }
 
 .logo-section {
@@ -168,6 +170,7 @@ connectFacebook()
   font-size: 3em;
   margin-right: 15px;
   animation: pulse 2s infinite;
+  filter: drop-shadow(0 0 10px rgba(102, 126, 234, 0.5));
 }
 
 @keyframes pulse {
@@ -177,7 +180,7 @@ connectFacebook()
 }
 
 .main-title {
-  color: #333;
+  color: #ffffff;
   font-size: 2.5em;
   font-weight: 700;
   margin: 0;
@@ -185,10 +188,11 @@ connectFacebook()
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
 }
 
 .subtitle {
-  color: #666;
+  color: #a0a0a0;
   font-size: 1.2em;
   margin: 10px 0 0 0;
   font-weight: 400;
@@ -203,16 +207,18 @@ connectFacebook()
   align-items: flex-start;
   margin-bottom: 30px;
   padding: 20px;
-  background: #f8f9fa;
+  background: #2d2d3f;
   border-radius: 15px;
   transition: all 0.3s ease;
   border-left: 4px solid #667eea;
+  border: 1px solid #3d3d4f;
 }
 
 .policy-item:hover {
   transform: translateX(10px);
-  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15);
-  background: #f0f2ff;
+  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.2);
+  background: #3d3d4f;
+  border-color: #667eea;
 }
 
 .policy-number {
@@ -228,31 +234,32 @@ connectFacebook()
   font-size: 1.2em;
   margin-right: 20px;
   flex-shrink: 0;
+  box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
 }
 
 .policy-content h3 {
-  color: #333;
+  color: #ffffff;
   font-size: 1.3em;
   font-weight: 600;
   margin: 0 0 10px 0;
 }
 
 .policy-content p {
-  color: #666;
+  color: #b0b0b0;
   font-size: 1em;
   line-height: 1.6;
   margin: 0;
 }
 
 .footer-section {
-  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  background: linear-gradient(135deg, #2d2d3f, #3d3d4f);
   padding: 25px;
   border-radius: 15px;
-  border: 1px solid #e9ecef;
+  border: 1px solid #3d3d4f;
 }
 
 .permission-info h4 {
-  color: #333;
+  color: #ffffff;
   font-size: 1.2em;
   font-weight: 600;
   margin: 0 0 15px 0;
@@ -269,21 +276,23 @@ connectFacebook()
 }
 
 .permission-list li {
-  background: white;
+  background: #1e1e2e;
   padding: 12px 20px;
   border-radius: 10px;
-  color: #555;
+  color: #b0b0b0;
   font-weight: 500;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
-  border: 1px solid #e9ecef;
+  border: 1px solid #3d3d4f;
 }
 
 .permission-list li:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
   border-color: #667eea;
+  background: #2d2d3f;
+  color: #ffffff;
 }
 
 /* Responsive Design */
