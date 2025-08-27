@@ -4,6 +4,7 @@ import ViewEditNote from '@/views/ViewEditNote.vue'
 import ViewStats from '@/views/ViewStats.vue'
 import ViewAuth from '@/views/ViewAuth.vue'
 import gcn_register from '@/views/gcn_register.vue'
+import privacy_policy from '@/views/privacy_policy.vue'
 import { useStoreAuth } from '@/stores/storeAuth'
 
 //const storeAuth = useStoreAuth()
@@ -37,6 +38,11 @@ const routes = [
     path: '/register_gcn_sub_stream',
     name: 'register_gcn_sub_stream',
     component: gcn_register
+  },
+  {
+    path: '/privacy_policy',
+    name: 'privacy_policy',
+    component: privacy_policy
   }
 ]
 
@@ -50,7 +56,8 @@ router.beforeEach(async (to, from) => {
   if (
     !storeAuth.user.id &&
     to.name !== 'auth' &&
-    to.name !== 'register_gcn_sub_stream'
+    to.name !== 'register_gcn_sub_stream' &&
+    to.name !== 'privacy_policy'
   ) {
     return { name: 'auth' }
   }

@@ -54,6 +54,15 @@
             <span class="nav-icon">📈</span>
             <span class="nav-text">Stats</span>
           </RouterLink>
+          <RouterLink
+            @click="showMobileNav = false"
+            to="/privacy_policy"
+            class="nav-link"
+            active-class="nav-active"
+          >
+            <span class="nav-icon">📈</span>
+            <span class="nav-text">Privacy  & Policy</span>
+          </RouterLink>
         </div>
         <div class="navbar-end">
           <button 

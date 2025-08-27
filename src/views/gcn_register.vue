@@ -30,7 +30,7 @@
           <div class="policy-number">3</div>
           <div class="policy-content">
             <h3>App Purpose</h3>
-            <p>This app is designed to count live views from different pages that are sub-streaming your video or live feed content.</p>
+            <p>This app is designed to count live views from different pages that are sub-streaming our video or live feed content.</p>
           </div>
         </div>
 
