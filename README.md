@@ -13,8 +13,8 @@ npm install
 ### 2. Environment Variables
 Create a `.env` file in the functions directory with:
 ```
-FACEBOOK_APP_ID=765691559587440
-FACEBOOK_APP_SECRET=4bb914ca679d5682473a50f3d6ffd874
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
 ```
 
 ### 3. Deploy Functions

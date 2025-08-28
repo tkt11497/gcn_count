@@ -2,6 +2,7 @@
   <div class="notes">
     <div class="header-section">
       <h2 class="title">Live Concurrent Views Dashboard</h2>
+      <h2 class="title2">Total View  - {{ totalLiveViewers }}</h2>
       <button @click="refreshAllPages" class="refresh-all-btn" :disabled="isRefreshing">
         {{ isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh All' }}
       </button>
@@ -36,6 +37,9 @@
             <div class="live-status">
               <span class="status-indicator" :class="{ 'live': note.liveData.isLive }">
                 {{ note.liveData.isLive ? '🔴 LIVE' : '⚫ Offline' }}
+              </span>
+              <span class="status-indicator url_class" :class="{ 'live': note.liveData.isLive }">
+                Stream Url {{ note.liveData.isLive ? note.liveData.stream_url : '--' }}
               </span>
             </div>
             
@@ -82,12 +86,48 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
 import { getLiveVideoData, getPageInsights } from '@/js/facebookAuth'
+import { db } from '@/js/firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 const storeNotes = useStoreNotes()
 const isRefreshing = ref(false)
+
+// Returns total live viewers across all pages (sums numeric viewerCount of live items)
+const computeTotalLiveViewers = () => {
+  try {
+    return storeNotes.notes.reduce((sum, note) => {
+      const isLive = note && note.liveData && note.liveData.isLive
+      const raw = isLive ? Number(note.liveData.viewerCount) : 0
+      const add = Number.isFinite(raw) ? raw : 0
+      return sum + add
+    }, 0)
+  } catch (_) {
+    return 0
+  }
+}
+
+// Reactive total
+const totalLiveViewers = computed(computeTotalLiveViewers)
+
+// Persist total to Firestore whenever it changes
+const saveTotalToFirestore = async (total) => {
+  try {
+    const ref = doc(db, 'metrics', 'live_totals')
+    await setDoc(ref, {
+      totalLiveViewers: Number(total) || 0,
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+  } catch (e) {
+    console.error('Failed saving total to Firestore', e)
+  }
+}
+
+watch(totalLiveViewers, (val) => {
+  saveTotalToFirestore(val)
+})
 
 const test= async(page_id,page_token)=>{
   const res=await fetch(`https://graph.facebook.com/v20.0/${page_id}/live_videos?fields=id,status,stream_url&access_token=${page_token}`)
@@ -117,6 +157,7 @@ const refreshPageData = async (note) => {
         duration: duration,
         title: liveData.title,
         videoId: liveData.videoId,
+        stream_url: liveData.stream_url,
         lastUpdated: new Date().toLocaleTimeString()
       }
     } else {
@@ -126,6 +167,7 @@ const refreshPageData = async (note) => {
         duration: 'N/A',
         title: 'N/A',
         videoId: null,
+        stream_url:null,
         lastUpdated: new Date().toLocaleTimeString()
       }
     }
@@ -188,15 +230,15 @@ const autoRefreshAllPages = async () => {
   }
 }
 
-// Set up auto-refresh every 30 seconds
+// Set up auto-refresh every 90 seconds
 let refreshInterval = null
 
 onMounted(() => {
   // Initial refresh after 2 seconds
   setTimeout(autoRefreshAllPages, 2000)
   
-  // // Set up interval for auto-refresh
-  refreshInterval = setInterval(autoRefreshAllPages, 30000) // 30 seconds
+  // Set up interval for auto-refresh
+  refreshInterval = setInterval(autoRefreshAllPages, 90000) // 90 seconds
 })
 
 // Clean up interval on unmount
@@ -214,7 +256,11 @@ onUnmounted(() => {
   padding: 20px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
-
+.url_class{
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis
+}
 .header-section {
   display: flex;
   justify-content: space-between;
@@ -230,6 +276,17 @@ onUnmounted(() => {
 .title {
   color: #ffffff;
   font-size: 2em;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+}
+.title2{
+  color: #ffffff;
+  font-size: 20px;
   font-weight: 700;
   margin: 0;
   background: linear-gradient(135deg, #667eea, #764ba2);

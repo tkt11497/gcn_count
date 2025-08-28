@@ -321,7 +321,8 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
           viewerCount: activeLive.viewer_count || 0,
           videoId: activeLive.id,
           title: activeLive.title,
-          startTime: activeLive.creation_time
+          startTime: activeLive.creation_time,
+          stream_url:activeLive.stream_url
         };
       }
     }
@@ -344,7 +345,8 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
       viewerCount: 0,
       videoId: null,
       title: null,
-      startTime: null
+      startTime: null,
+      stream_url:null
     };
     
   } catch (error) {

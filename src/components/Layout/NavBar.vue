@@ -43,7 +43,7 @@
             active-class="nav-active"
           >
             <span class="nav-icon">📝</span>
-            <span class="nav-text">Notes</span>
+            <span class="nav-text">Register</span>
           </RouterLink>
           <RouterLink
             @click="showMobileNav = false"
