@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { collection, getDocs,onSnapshot,
           addDoc, deleteDoc, doc, updateDoc,
-          query, orderBy, limit } from "firebase/firestore";
+          query, orderBy, limit, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from '@/js/firebase'
 const notesCollection = collection(db, "pages")
 // const notesQuery = query(notesCollection, orderBy("date"), limit(3));
@@ -64,15 +64,18 @@ export const useStoreNotes = defineStore('storeNotes', {
       // this.notes.unshift(note)
     },
     async addPages(final) {
-      let currentDate = new Date().getTime()
-
-      const docRef = await addDoc(notesCollection, {
-        // content: newNoteContent.content,
+      // Upsert a page using its page id as the Firestore doc id
+      if (!final || !final.id) {
+        console.warn('addPages requires an object with an id field')
+        return
+      }
+      const currentDate = new Date().getTime()
+      const pageDocRef = doc(db, 'pages', String(final.id))
+      await setDoc(pageDocRef, {
         ...final,
-        date: currentDate
-      });
-
-      // this.notes.unshift(note)
+        date: currentDate,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
     },
     async deleteNote(idToDelete) {
       await deleteDoc(doc(notesCollection, idToDelete));

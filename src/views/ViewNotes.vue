@@ -173,20 +173,20 @@ const refreshPageData = async (note) => {
     }
 
     // Get page insights for additional data
-    try {
-      const pageInsights = await getPageInsights(note.id, note.access_token)
-      const pageViews = pageInsights.find(insight => insight.name === 'page_views_total')
-      const pageFans = pageInsights.find(insight => insight.name === 'page_fans')
+    // try {
+    //   const pageInsights = await getPageInsights(note.id, note.access_token)
+    //   const pageViews = pageInsights.find(insight => insight.name === 'page_views_total')
+    //   const pageFans = pageInsights.find(insight => insight.name === 'page_fans')
       
-      if (pageViews) {
-        note.liveData.pageViews = pageViews.values?.[0]?.value || 0
-      }
-      if (pageFans) {
-        note.liveData.pageFans = pageFans.values?.[0]?.value || 0
-      }
-    } catch (error) {
-      console.error('Error getting page insights:', error)
-    }
+    //   if (pageViews) {
+    //     note.liveData.pageViews = pageViews.values?.[0]?.value || 0
+    //   }
+    //   if (pageFans) {
+    //     note.liveData.pageFans = pageFans.values?.[0]?.value || 0
+    //   }
+    // } catch (error) {
+    //   console.error('Error getting page insights:', error)
+    // }
 
   } catch (error) {
     console.error('Error refreshing page data:', error)
