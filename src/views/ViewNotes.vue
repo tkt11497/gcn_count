@@ -38,9 +38,7 @@
               <span class="status-indicator" :class="{ 'live': note.liveData.isLive }">
                 {{ note.liveData.isLive ? '🔴 LIVE' : '⚫ Offline' }}
               </span>
-              <span class="status-indicator url_class" :class="{ 'live': note.liveData.isLive }">
-                Stream Url {{ note.liveData.isLive ? note.liveData.stream_url : '--' }}
-              </span>
+              
             </div>
             
             <div v-if="note.liveData.isLive" class="live-stats">
@@ -257,8 +255,8 @@ onUnmounted(() => {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 .url_class{
-  max-width: 300px;
-  overflow: hidden;
+  max-width: 300px!important;
+  overflow: hidden!important;
   text-overflow: ellipsis
 }
 .header-section {
