@@ -1,0 +1,29 @@
+User-agent: *
+Allow: /
+
+# Allow Facebook's crawler for link previews
+User-agent: facebookexternalhit
+Allow: /
+
+# Allow other social media crawlers
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+# Allow Google and Bing crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Sitemap location (update with your actual domain)
+Sitemap: https://yourdomain.com/sitemap.xml
