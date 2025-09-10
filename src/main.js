@@ -1,5 +1,7 @@
 import { createApp, markRaw } from 'vue'
 import { createPinia } from 'pinia'
+import '@/assets/css/index.css'
+import '@/assets/css/init.scss'
 import App from './App.vue'
 import router from '@/router'
 

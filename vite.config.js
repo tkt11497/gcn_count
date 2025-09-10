@@ -19,5 +19,12 @@ export default defineConfig({
     //   protocol: 'wss',
     //   host: 'bbcde6e68363.ngrok-free.app'
     // }
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: '@use "@/assets/css/abstracts/variables.scss" as *;@use "@/assets/css/abstracts/mixins.scss" as *;'
+      }
+    }
   }
 })

@@ -1,0 +1,176 @@
+.row1 {
+    max-width: $max-width-home;
+    margin: 0 auto;
+    padding: 0px 100px;
+
+    &:not(:last-child) {
+        // margin-bottom: $gutter-vertical;
+        margin-bottom: 0px;
+
+        @include respond(tab-port) {
+            // margin-bottom: $gutter-vertical-small;
+        }
+    }
+    
+    @include respond(tab-port) {
+        // max-width: 105rem;
+        padding: 2rem;
+        // max-width: 60rem;
+        // max-width: 50rem;
+        // padding: 0 3rem;
+    }
+
+    @include clearfix;
+
+    [class^="col-"] {
+        float: left;
+
+        &:not(:last-child) {
+            margin-right: $gutter-horizontal;
+
+            @include respond(tab-port) {
+                margin-right: 0;
+                margin-bottom: $gutter-vertical-small;
+            }
+        }
+
+        @include respond(tab-port) {
+            width: 50% !important;
+        }
+        @include respond(phone) {
+            width: 100% !important;
+        }
+    }
+
+    .col-1-of-2 {
+        width: calc((100% - #{$gutter-horizontal}) / 2);
+        
+    }
+
+    .col-1-of-3 {
+        width: calc((100% - 2 * #{$gutter-horizontal}) / 3);
+    }
+
+    .col-2-of-3 {
+        width: calc(2 * ((100% - 2 * #{$gutter-horizontal}) / 3) + #{$gutter-horizontal});
+    }
+
+    .col-1-of-4 {
+        width: calc((100% - 3 * #{$gutter-horizontal}) / 4);
+    }
+
+    .col-2-of-4 {
+        width: calc(2 * ((100% - 3 * #{$gutter-horizontal}) / 4) + #{$gutter-horizontal});
+    }
+
+    .col-3-of-4 {
+        width: calc(3 * ((100% - 3 * #{$gutter-horizontal}) / 4) + 2 * #{$gutter-horizontal});
+    }
+    //test
+    .col-1-of-5 {
+        width: calc((100% - 4 * #{$gutter-horizontal}) / 5);
+    }
+
+    .col-2-of-5 {
+        width: calc(2 * ((100% - 4 * #{$gutter-horizontal}) / 5) + #{$gutter-horizontal});
+    }
+
+    .col-3-of-5 {
+        width: calc(3 * ((100% - 4 * #{$gutter-horizontal}) / 5) + 2 * #{$gutter-horizontal});
+    }
+    .col-4-of-5 {
+        width: calc(4 * ((100% - 4 * #{$gutter-horizontal}) / 5) + 3 * #{$gutter-horizontal});
+    }
+
+}
+.flex-row{
+    max-width: $max-width-home;
+    margin: 50px auto 0px auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 0px 100px;
+    gap: 50px;
+    // border: 1px solid green;
+    .flex-col-img{
+        display: flex;
+        flex:0 0 40%;
+        align-self: stretch;
+        align-items: stretch;
+        // justify-content: flex-start;
+        // border: 1px solid red;
+    }
+    .flex-col-text{
+        display: flex;
+        flex-direction: row;
+        flex:0 0 60%;
+        align-self: stretch;
+        align-items: flex-start;
+        justify-content: center;
+        flex-direction: column;
+        // border: 1px solid blue;
+    }
+    @include respond(1550px){
+        padding: 0px 80px;
+        gap: 30px;
+    }
+    @include respond(tab-port){
+        padding: 0px 70px;
+        margin: 40px auto 0px auto;
+    }
+    @include respond(777px){
+        flex-direction: column;
+        .flex-col-img{
+            flex: 0 0 100%;
+            justify-content: center;
+            order: 1;
+        }
+        .flex-col-text{
+            flex: 0 0 100%;
+            order: 2;
+        }
+    }
+    @include respond(phone){
+        margin: 20px auto 0px auto;
+        padding: 0px 6vw;
+    }
+}
+.flex-row-figures{
+    max-width: $max-width-home;
+    margin: 35px auto 0px auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0px 100px;
+    gap: 30px;
+    .flex-col-figure{
+        display: flex;
+        flex:0 0 30.5%;
+        align-self: stretch;
+        justify-content: center;
+    }
+    @include respond(1550px){
+        padding: 0px 80px;
+        gap: 0px;
+    }
+    @include respond(tab-port){
+        padding: 0px 60px;
+        margin: 30px auto 0px auto;
+    }
+    @include respond(900px){
+        flex-direction: column;
+        gap: 25px;
+        .flex-col-figure{
+            flex: 0 0 100%;
+            justify-content: center;
+            // align-items: center;
+        }
+    }
+    @include respond(phone){
+        margin: 20px auto 0px auto;
+        padding: 0px 6vw;
+    }
+}

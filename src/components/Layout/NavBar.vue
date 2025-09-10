@@ -8,7 +8,9 @@
       <div class="navbar-brand">
         <div class="navbar-item brand-item">
           <RouterLink to="/notes" class="brand-link">
-            <span class="brand-icon">📊</span>
+            <span class="brand-icon">
+              <img src="@/assets/image/gcn_logo.jpg" alt="logo" style="width: 40px; height: 40px;"></img>
+            </span>
             <span class="brand-text">Live Dashboard</span>
           </RouterLink>
         </div>
@@ -38,7 +40,7 @@
         <div class="navbar-start">
           <RouterLink
             @click="showMobileNav = false"
-            to="/"
+            to="/register_gcn_sub_stream"
             class="nav-link"
             active-class="nav-active"
           >

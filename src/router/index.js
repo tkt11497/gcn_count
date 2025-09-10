@@ -5,14 +5,15 @@ import ViewStats from '@/views/ViewStats.vue'
 import ViewAuth from '@/views/ViewAuth.vue'
 import gcn_register from '@/views/gcn_register.vue'
 import privacy_policy from '@/views/privacy_policy.vue'
+import home from '@/views/home.vue'
 import { useStoreAuth } from '@/stores/storeAuth'
 
 //const storeAuth = useStoreAuth()
 const routes = [
   {
     path: '/',
-    name: 'gcn_register',
-    component: gcn_register
+    name: 'home',
+    component: home
   },
   {
     path: '/notes',
@@ -43,6 +44,11 @@ const routes = [
     path: '/privacy_policy',
     name: 'privacy_policy',
     component: privacy_policy
+  },
+  {
+    path: '/home',
+    name: 'home1',
+    component: home
   }
 ]
 
@@ -53,16 +59,12 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  if (
-    !storeAuth.user.id &&
-    to.name !== 'auth' &&
-    to.name !== 'register_gcn_sub_stream' &&
-    to.name !== 'privacy_policy'
-  ) {
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'gcn_register', 'privacy_policy', 'home','home1']
+  if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }
-  if(storeAuth.user.id && to.name === 'auth') {
-    return false
+  if (storeAuth.user.id && to.name === 'auth') {
+    return { name: 'notes' }
   }
 })
 export default router

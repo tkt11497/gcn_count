@@ -1,0 +1,134 @@
+html,
+body,
+#app {
+    @apply h-full
+}
+
+:root {
+    --primary: #558BFF;
+    --link: #638EFD;
+    --tip: #9DACB4;
+    --secondary: #999;
+    --content: #8E929E;
+    --grey: #CECECE;
+    --sky: #E4F0FF;
+    --green-gradient: linear-gradient(#4EFE2B, #3EBE46);
+    --blue-gradient: linear-gradient(#83C3FF, #638EFD);
+    --light-blue-gradient: linear-gradient(#C5E3FF, #B9CDFF);
+    --sky-gradient: linear-gradient(#D9E9FF, #E8F3FF);
+}
+
+/* 带有 Header 的页面容器 */
+.with_header--container {
+    height: calc(100% - 36px);
+    @apply overflow-auto;
+}
+
+/* Vant UI 组件调整 */
+
+
+.van-progress {
+    --van-progress-background: white;
+    --van-progress-height: 8px;
+}
+
+.van-button--small {
+    --van-button-small-height: 28px;
+    --van-button-default-line-height: none;
+    --van-button-round-radius: 8px;
+    --van-button-small-font-size: 10px;
+}
+
+.van-cell-group {
+    --van-cell-group-background: var(--sky-gradient);
+    --van-cell-background: transparent;
+    --van-cell-group-inset-padding: 12px;
+    --van-cell-value-font-size: 8px;
+    --van-cell-right-icon-color: #333;
+
+    .van-cell__title {
+        @apply ml-1;
+    }
+}
+.van-field{
+    --van-field-placeholder-text-color:#111!important;
+}
+.input-box-field1 .van-cell__title.van-field__label{
+    border-right: 1px solid #a7cfeb;
+}
+
+.van-pull-refresh {
+    @apply min-h-full;
+}
+/* Vant UI 组件调整 */
+
+/* 橙色按钮 */
+.operation_btn {
+    background: linear-gradient(#D8AB41, #F5DFA0, #D8AB41);
+    box-shadow: 0 -1px 0 0 #0000001A inset, 0 1px 2px 0 #00000040;
+    @apply rounded-md w-max text-[#A47914] px-4 text-xs leading-5;
+}
+/* 蓝色渐变文本 */
+.blue_gradient_text {
+    background: var(--blue-gradient);
+    color: transparent;
+    background-clip: text;
+    --webkit-background-clip: text;
+}
+
+/* 橙色渐变文本 */
+.orange_gradient_text {
+    background: linear-gradient(#83C3FF, #638EFD);
+    color: transparent;
+    background-clip: text;
+    --webkit-background-clip: text;
+}
+
+/* 块级 Tabs 组件 */
+.solid-tabs.van-tabs {
+    --van-tab-font-size: 12px;
+    --van-radius-sm: 6px;
+
+    .van-tabs__nav--card {
+        background: rgba(118, 118, 128, .12);
+        padding: 2px;
+        @apply m-0 border-none;
+    }
+
+    .van-tab--card {
+        @apply border-none;
+
+        &.van-tab--active {
+            background: var(--blue-gradient);
+        }
+    }
+
+    .van-tab {
+        @apply rounded;
+    }
+}
+
+/* 底部统计背景 */
+.statistics-bottom {
+    /* background-image: url('@/assets/image/bottom.png'); */
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+/* Card */
+
+.newsLetter, .main_title, .useOswald{
+  font-family: "Oswald", serif;
+}
+.newsLetter input{
+  font-family: "Roboto", sans-serif;
+}
+.pcontainer{
+  max-width: 1500px;
+}
+.boxShadowGreen{
+  box-shadow: 4px 4px 0px #00e785;
+}
+.boxShadowGreenMini{
+  box-shadow: 2px 2px 0px #00e785;
+}

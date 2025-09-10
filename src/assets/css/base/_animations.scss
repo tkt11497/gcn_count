@@ -1,0 +1,85 @@
+@keyframes moveInLeft {
+    0% {
+        opacity: 0;
+        transform: translateX(-10rem);
+    }
+
+    80% {
+        transform: translateX(1rem);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(0);
+    }
+}
+@keyframes flash {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes moveInRight {
+    0% {
+        opacity: 0;
+        transform: translateX(10rem);
+    }
+
+    80% {
+        transform: translateX(-1rem);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(0);
+    }
+}
+
+@keyframes moveInBottom {
+    0% {
+        opacity: 0;
+        transform: translateY(3rem);
+    }
+    50%{
+        transform: translateY(-1rem);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(0);
+    }
+}
+@keyframes moveInTop {
+    0% {
+        opacity: 0;
+        transform: translateY(-3rem);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(0);
+    }
+}
+@keyframes expandFromCenter {
+    0% {
+        clip-path: inset(40% round 20px);
+      /* Start with clipped center */
+    }
+
+    100% {
+        clip-path: inset(0% round 20px); /* Fully expanded with no clipping */
+    }
+}
+@keyframes expandFromLeft {
+    0% {
+        // opacity: 0;
+      clip-path: inset(0 100% 0 0); /* Initially clipped from the right */
+    }
+    100% {
+        // opacity: 1;
+      clip-path: inset(0 0 0 0); /* Fully visible */
+    }
+  }

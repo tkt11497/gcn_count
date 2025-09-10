@@ -1,0 +1,74 @@
+@mixin clearfix {
+    &::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+}
+
+@mixin absCenter {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+@mixin scrollAnimation($animation,$delay:0s) {
+    @if $animation == expandFromCenter {
+        animation: expandFromCenter 1s ease-in-out forwards;
+    }
+    @if $animation == expandFromLeft {
+        // opacity: 0;
+        clip-path: inset(0 100% 0 0);
+        animation: expandFromLeft 1s ease-in-out $delay forwards;
+    }
+    @if $animation == moveInLeft {
+        animation: moveInLeft 1s ease-in-out forwards;
+    }
+    @if $animation == moveInRight {
+        animation: moveInRight 1s ease-in-out forwards;
+    }
+}
+
+
+// MEDIA QUERY MANAGER
+/*
+0 - 600px:      Phone
+600 - 900px:    Tablet portrait
+900 - 1200px:   Tablet landscape
+[1200 - 1800] is where our normal styles apply
+1800px + :      Big desktop
+
+$breakpoint arguement choices:
+- phone
+- tab-port
+- tab-land
+- big-desktop
+
+ORDER: Base + typography > general layout + grid > page layout > components
+
+1em = 16px
+*/
+@mixin respond($breakpoint) {
+    @if $breakpoint == phone-xs {
+        @media only screen and (max-width: 400px) { @content };    //400px
+    }
+    @else if $breakpoint == phone {
+        @media only screen and (max-width: 37.5em) { @content };    //600px
+    }
+    @else if $breakpoint == tab-port {
+        @media only screen and (max-width: 991px) { @content };     //900px
+    }
+    @else if $breakpoint == tab-land {
+        @media only screen and (max-width: 75em) { @content };    //1200px
+    }
+    @else if $breakpoint == laptop {
+        @media only screen and (max-width: 1600px) { @content };    //1200px&1800
+    }
+    @else if $breakpoint == big-desktop {
+        @media only screen and (min-width: 112.5em) { @content };    //1800
+    }
+    @else {
+        @media only screen and (max-width: $breakpoint) { @content };    //pass custom breakpoint
+    }
+}
+
