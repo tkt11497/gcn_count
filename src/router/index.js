@@ -13,7 +13,7 @@ const routes = [
   {
     path: '/',
     name: 'home',
-    component: home
+    component: privacy_policy
   },
   {
     path: '/notes',
