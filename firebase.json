@@ -5,6 +5,11 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      { "source": "/api/facebook/exchange-token", "function": "exchangeFacebookToken" },
+      { "source": "/api/facebook/get-page-tokens", "function": "getPageTokens" },
+      { "source": "/api/health", "function": "healthCheck" }
     ]
   },
   "functions": {

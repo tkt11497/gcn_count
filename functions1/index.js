@@ -23,6 +23,12 @@ function getFacebookConfig() {
   return { FACEBOOK_APP_ID, FACEBOOK_APP_SECRET };
 }
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
 /**
  * Exchange short-lived Facebook token for long-lived token
  * This function should be called from your frontend after getting a short-lived token
@@ -31,6 +37,11 @@ export const exchangeFacebookToken = onRequest({
   cors: true, // Enable CORS for cross-origin requests
   maxInstances: 10,
 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
   try {
     // Only allow POST requests
     if (req.method !== 'POST') {
@@ -95,6 +106,11 @@ export const getPageTokens = onRequest({
   cors: true,
   maxInstances: 10,
 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed. Use POST.' });
@@ -147,6 +163,7 @@ export const getPageTokens = onRequest({
 export const healthCheck = onRequest({
   cors: true,
 }, (req, res) => {
+  setCors(res);
   res.status(200).json({ 
     status: 'ok', 
     message: 'Facebook token exchange service is running' 

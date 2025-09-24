@@ -80,13 +80,13 @@ async function connectFacebook() {
     scopes: [
       'pages_show_list',
       'pages_read_engagement',
-      'read_insights',
-      // add more if needed, e.g. 'pages_manage_posts'
-      'business_management',
-      'pages_manage_metadata',
       'pages_read_user_content',
-      'pages_manage_posts',
-      'pages_manage_engagement'
+      // add more if needed, e.g. 'pages_manage_posts'
+      // 'business_management',
+      // 'pages_manage_metadata',
+      // 'pages_manage_posts',
+      // 'pages_manage_engagement'
+      //'read_insights',
 
     ]
   });

@@ -168,8 +168,8 @@ export function loadFacebookSDK(appId) {
     return data
   }
   export async function exchangeForLongLivedUserTokenViaFirebase(shortLivedUserToken) {
-    // Get the Firebase Functions URL - you'll need to replace this with your actual function URL after deployment
-    const functionUrl = 'https://exchangefacebooktoken-iue46n3ata-uc.a.run.app'
+    // Use same-origin path that is proxied to Firebase Functions via Hosting rewrites to avoid CORS
+    const functionUrl = '/api/facebook/exchange-token'
     
     const res = await fetch(functionUrl, {
       method: 'POST',
@@ -316,9 +316,23 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
       const activeLive = liveVideos.find(video => video.status === 'LIVE');
       
       if (activeLive) {
+        let viewerCount = typeof activeLive.viewer_count === 'number' ? activeLive.viewer_count : null;
+
+        // Fallback: try fetching live_views/views from the video node if viewer_count is missing
+        if (viewerCount == null) {
+          try {
+            const videoDetailsRes = await fetch(`https://graph.facebook.com/v23.0/${activeLive.id}?fields=live_views&access_token=${encodeURIComponent(pageAccessToken)}`);
+            if (videoDetailsRes.ok) {
+              const vd = await videoDetailsRes.json();
+              if (typeof vd.live_views === 'number') viewerCount = vd.live_views;
+              else if (typeof vd.views === 'number') viewerCount = vd.views;
+            }
+          } catch (_) {}
+        }
+
         return {
           isLive: true,
-          viewerCount: activeLive.viewer_count || 0,
+          viewerCount: viewerCount ?? 0,
           videoId: activeLive.id,
           title: activeLive.title,
           startTime: activeLive.creation_time,
