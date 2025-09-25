@@ -398,7 +398,7 @@ export async function getVideoComments(videoId, pageAccessToken, { limit = 25 } 
     order: 'reverse_chronological',
     filter: 'stream',
     live_filter: 'filter_low_quality',
-    fields: 'from{name,link,picture{url}},message,created_time,permalink_url',
+    fields: 'from{id,name,link,picture{url}},message,created_time,permalink_url',
     limit: String(limit),
     access_token: pageAccessToken
   });

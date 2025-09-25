@@ -10,7 +10,7 @@
       </div>
 
       <div class="content-section">
-        <div class="policy-item">
+        <div class="policy-item" @click="connectFacebook()">
           <div class="policy-number">1</div>
           <div class="policy-content">
             <h3>Allow Pop-ups</h3>
