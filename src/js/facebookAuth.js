@@ -389,4 +389,93 @@ export async function getLiveVideoData(pageId, pageAccessToken) {
   }
 } 
 
+/**
+ * Fetch recent comments for a video (works for live videos).
+ * Returns newest-first by default.
+ */
+export async function getVideoComments(videoId, pageAccessToken, { limit = 25 } = {}) {
+  const params = new URLSearchParams({
+    order: 'reverse_chronological',
+    filter: 'stream',
+    live_filter: 'filter_low_quality',
+    fields: 'from{name,link,picture{url}},message,created_time,permalink_url',
+    limit: String(limit),
+    access_token: pageAccessToken
+  });
+
+  const res = await fetch(`https://graph.facebook.com/v23.0/${videoId}/comments?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Failed to get comments: ${res.status}`;
+    try {
+      const err = await res.json();
+      if (err && err.error && err.error.message) message += `: ${err.error.message}`;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  const data = await res.json();
+  const list = Array.isArray(data && data.data) ? data.data : [];
+  // Ensure a name field for UI even if API redacts 'from'
+  return list.map(c => ({
+    ...c,
+    from: c.from || null,
+    _displayName: c.from && c.from.name ? c.from.name : 'Unknown'
+  }));
+}
+
+/**
+ * Fetch reactions summary (total and by type) for a video.
+ */
+export async function getVideoReactionsSummary(videoId, pageAccessToken) {
+  const reactionTypes = ['LIKE','LOVE','CARE','HAHA','WOW','SAD','ANGRY'];
+  const base = `https://graph.facebook.com/v23.0/${videoId}/reactions`;
+  const common = `summary=total_count&limit=0&access_token=${encodeURIComponent(pageAccessToken)}`;
+
+  // Total reactions (all types)
+  const totalUrl = `${base}?${common}`;
+
+  // Per-type reactions
+  const typeUrls = reactionTypes.map(t => `${base}?type=${t}&${common}`);
+
+  const requests = [fetch(totalUrl), ...typeUrls.map(u => fetch(u))];
+  const responses = await Promise.all(requests);
+
+  const parseJsonSafe = async (r) => {
+    try { return await r.json(); } catch { return null; }
+  };
+
+  const [totalRes, ...typeRes] = responses;
+  if (!totalRes.ok) {
+    let message = `Failed to get reactions: ${totalRes.status}`;
+    const err = await parseJsonSafe(totalRes);
+    if (err && err.error && err.error.message) message += `: ${err.error.message}`;
+    throw new Error(message);
+  }
+
+  const totalJson = await parseJsonSafe(totalRes);
+  const summary = { total: totalJson?.summary?.total_count ?? 0, byType: {} };
+
+  await Promise.all(typeRes.map(async (res, idx) => {
+    const t = reactionTypes[idx];
+    let count = 0;
+    if (res.ok) {
+      const j = await parseJsonSafe(res);
+      count = j?.summary?.total_count ?? 0;
+    }
+    summary.byType[t] = count;
+  }));
+
+  return summary;
+}
+
+/**
+ * Convenience: fetch both comments and reactions in parallel.
+ */
+export async function getLiveVideoEngagement(videoId, pageAccessToken, { commentLimit = 25 } = {}) {
+  const [comments, reactions] = await Promise.all([
+    getVideoComments(videoId, pageAccessToken, { limit: commentLimit }),
+    getVideoReactionsSummary(videoId, pageAccessToken)
+  ]);
+  return { comments, reactions };
+}
+
  

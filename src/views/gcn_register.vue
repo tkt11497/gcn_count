@@ -81,7 +81,9 @@ async function connectFacebook() {
       'pages_show_list',
       'pages_read_engagement',
       'pages_read_user_content',
-      // add more if needed, e.g. 'pages_manage_posts'
+      'read_insights'
+      // add more if needed, e.g. 
+      // 'pages_manage_posts'
       // 'business_management',
       // 'pages_manage_metadata',
       // 'pages_manage_posts',

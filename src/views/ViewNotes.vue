@@ -54,6 +54,16 @@
                 <span class="stat-label">Video Title:</span>
                 <span class="stat-value">{{ note.liveData.title }}</span>
               </div>
+            <div class="stat-item" v-if="note.liveData.reactions">
+              <span class="stat-label">Reactions (Total):</span>
+              <span class="stat-value">{{ note.liveData.reactions.total }}</span>
+              <div class="reactions-grid">
+                <div class="reaction-pill" v-for="(count, type) in note.liveData.reactions.byType" :key="type">
+                  <span class="reaction-type">{{ type }}</span>
+                  <span class="reaction-count">{{ count }}</span>
+                </div>
+              </div>
+            </div>
             </div>
             <div v-else class="offline-stats">
               <div class="stat-item">
@@ -65,6 +75,19 @@
                 <span class="stat-value">{{ note.liveData.lastUpdated }}</span>
               </div>
             </div>
+          </div>
+
+          <div v-if="note.liveData && note.liveData.isLive && note.liveData.comments && note.liveData.comments.length" class="comments">
+            <h4 class="comments-title">Recent Comments</h4>
+            <ul class="comments-list">
+              <li v-for="(c, i) in note.liveData.comments" :key="c.id || i" class="comment-item">
+                <div class="comment-meta">
+                  <span class="comment-author">{{ c.from?.name || 'Unknown' }}</span>
+                  <span class="comment-time">{{ new Date(c.created_time).toLocaleTimeString() }}</span>
+                </div>
+                <div class="comment-message">{{ c.message }}</div>
+              </li>
+            </ul>
           </div>
 
           <div v-if="note.error" class="error-message">
@@ -86,7 +109,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
-import { getLiveVideoData, getPageInsights } from '@/js/facebookAuth'
+import { getLiveVideoData, getPageInsights, getLiveVideoEngagement } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 
@@ -156,7 +179,18 @@ const refreshPageData = async (note) => {
         title: liveData.title,
         videoId: liveData.videoId,
         stream_url: liveData.stream_url,
-        lastUpdated: new Date().toLocaleTimeString()
+        lastUpdated: new Date().toLocaleTimeString(),
+        reactions: null,
+        comments: []
+      }
+
+      // Fetch engagement (reactions summary + recent comments)
+      try {
+        const engagement = await getLiveVideoEngagement(note.liveData.videoId, note.access_token, { commentLimit: 20 })
+        note.liveData.reactions = engagement.reactions
+        note.liveData.comments = engagement.comments
+      } catch (e) {
+        console.warn('Failed to fetch engagement:', e)
       }
     } else {
       note.liveData = {
@@ -166,7 +200,9 @@ const refreshPageData = async (note) => {
         title: 'N/A',
         videoId: null,
         stream_url:null,
-        lastUpdated: new Date().toLocaleTimeString()
+        lastUpdated: new Date().toLocaleTimeString(),
+        reactions: null,
+        comments: []
       }
     }
 
@@ -478,6 +514,33 @@ onUnmounted(() => {
   box-shadow: 0 0 20px rgba(102, 126, 234, 0.2);
 }
 
+.reactions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reaction-pill {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #1e1e2e;
+  border: 1px solid #3d3d4f;
+  border-radius: 8px;
+  font-size: 0.85em;
+}
+
+.reaction-type {
+  color: #a0a0a0;
+}
+
+.reaction-count {
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .stat-label {
   display: block;
   font-size: 0.9em;
@@ -508,6 +571,57 @@ onUnmounted(() => {
   color: #ff9999;
   font-size: 0.9em;
   font-weight: 500;
+}
+
+.comments {
+  margin-top: 16px;
+  background: #1e1e2e;
+  border: 1px solid #3d3d4f;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.comments-title {
+  margin: 0 0 10px 0;
+  font-size: 1.1em;
+  color: #ffffff;
+}
+
+.comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.comment-item {
+  background: #2d2d3f;
+  border: 1px solid #3d3d4f;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.comment-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8em;
+  color: #a0a0a0;
+  margin-bottom: 6px;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.comment-time {
+  font-style: italic;
+}
+
+.comment-message {
+  color: #ffffff;
+  white-space: pre-wrap;
 }
 
 /* Progress bar styling */
