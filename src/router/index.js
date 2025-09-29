@@ -12,7 +12,7 @@ import { useStoreAuth } from '@/stores/storeAuth'
 const routes = [
   {
     path: '/',
-    name: 'privacy_policy1',
+    name: 'base',
     component: privacy_policy
   },
   {
@@ -47,7 +47,7 @@ const routes = [
   },
   {
     path: '/home',
-    name: 'home1',
+    name: 'home',
     component: home
   }
 ]
@@ -59,7 +59,7 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  const publicPages = ['auth', 'register_gcn_sub_stream', 'gcn_register', 'privacy_policy', 'home','home1']
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home']
   if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }
