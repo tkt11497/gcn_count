@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import ViewNotes from '@/views/ViewNotes.vue'
 import ViewEditNote from '@/views/ViewEditNote.vue'
 import ViewStats from '@/views/ViewStats.vue'
@@ -12,7 +12,7 @@ import { useStoreAuth } from '@/stores/storeAuth'
 const routes = [
   {
     path: '/',
-    name: 'home',
+    name: 'privacy_policy1',
     component: privacy_policy
   },
   {
@@ -53,7 +53,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(),
+  history: createWebHistory(),
   routes
 })
 //navigation guards

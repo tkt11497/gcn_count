@@ -9,7 +9,8 @@
     "rewrites": [
       { "source": "/api/facebook/exchange-token", "function": "exchangeFacebookToken" },
       { "source": "/api/facebook/get-page-tokens", "function": "getPageTokens" },
-      { "source": "/api/health", "function": "healthCheck" }
+      { "source": "/api/health", "function": "healthCheck" },
+      { "source": "**", "destination": "/index.html" }
     ]
   },
   "functions": {
