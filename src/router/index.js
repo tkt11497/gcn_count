@@ -59,7 +59,7 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home']
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base']
   if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }
