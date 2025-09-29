@@ -2,7 +2,7 @@
     <banner></banner>
     <div class="section-1">
         <div class="row1 u-center-text">
-            <h1 class="heading-main1">Transform Games, Transform Entertainment</h1>
+            <h1 class="heading-main1">Empowering Esports Through Broadcast Analytics</h1>
         </div>
         <div class="flex-row">
             <div class="flex-col-img">
@@ -10,9 +10,11 @@
                 src="@/assets/image/section_1_img.png" alt="section_1_img">
             </div>
             <div class="flex-col-text">
-                <h1 ref="scrollAnimationRef" class="sub-title" :class="{'scrollInRight': isInView}">High-definition materials, easy profit</h1>
+                <h1 ref="scrollAnimationRef" class="sub-title" :class="{'scrollInRight': isInView}">From Passion to Impact, We Create the Hype!</h1>
                 <p class="paragraph1">
-                   Lorem ipsum dolor, sit amet consectetur adipisicing elit. Similique, exercitationem nemo, unde harum, eius commodi minus cumque totam hic ex recusandae ipsum? Quasi, repellendus accusantium! Eos laboriosam sit esse at!
+                    Game Cast Network (GCN) delivers real-time broadcast analytics technology for esports tournaments and live events.
+
+Our platform securely integrates with Facebook APIs to gather live viewership data, audience engagement insights, and post-performance metrics—helping organizers, brands, and partners make data-driven decisions to grow their esports reach.
                 </p>
 
             </div>
@@ -22,15 +24,18 @@
     </div>
     <div class="section-2">
         <div class="row1 u-center-text">
-            <h1 class="heading-main1">Enjoy games by blah</h1>
+            <h1 class="heading-main1">From Passion to Impact, We Create the Hype!</h1>
         </div>
         <div class="flex-row">
             <div class="flex-col-text">
                 <h1 ref="scrollInLeft2" class="sub-title" :class="{'scrollInLeft': scrollInLeft2_isInView}">
-                    Production and release in one go
+                   Who We Are
                 </h1>
                 <p class="paragraph1">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Saepe, tempora rem doloribus, alias ipsum quidem deserunt placeat sunt reprehenderit maiores ratione odio laboriosam neque aspernatur modi inventore ea magni dicta?
+                    Founded in 2016, Game Cast Network has evolved into a leading esports broadcast analytics provider in Southeast Asia.
+We specialize in tracking and analyzing live esports viewership across multiple streaming platforms, with a strong focus on Facebook Live integrations.
+
+Our technology empowers organizers and brands to understand their audience in real time, measure campaign success, and optimize future tournaments and broadcasts.
                 </p>
 
             </div>
@@ -44,7 +49,7 @@
     </div>
     <div class="section-3">
         <div class="row1 u-center-text">
-            <h1 class="heading-main1">Stand out on Casting</h1>
+            <h1 class="heading-main1">Broadcast Analytics Built for Esports</h1>
         </div>
         <div class="flex-row">
             <div class="flex-col-img">
@@ -52,11 +57,58 @@
                 src="@/assets/image/section_3_img.png" alt="section_3_img">
             </div>
             <div class="flex-col-text">
-                <!-- <h1 ref="scrollInLeft3" class="sub-title" :class="{'scrollInLeft': scrollInLeft3_isInView}">
-                    Production and release in one go
-                </h1> -->
-                <p class="paragraph2">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Consequuntur repellat voluptatibus iusto quibusdam! Impedit dolore voluptas quam id illo. Assumenda odit inventore debitis omnis aut est fuga magnam a autem.
+                <h1 ref="scrollInLeft3" class="sub-title" :class="{'scrollInLeft': scrollInLeft3_isInView}">
+                    Our Technology
+                </h1>
+                <p class="paragraph1">
+                    Our platform focuses exclusively on broadcast data analytics to deliver actionable insights for our partners and clients.
+
+Feature Description
+Real-Time Viewership Tracking Aggregate live viewers across multiple streaming partners into one unified dashboard.
+Facebook Page Integration Securely pull data such as concurrent viewers, total views, engagement, and audience metrics directly from Facebook APIs.
+Performance Analytics Measure post-broadcast performance, including reach, reactions, comments, and shares.
+Sponsor ROI Reporting Provide sponsors with accurate data on how their brand activations performed during live tournaments.
+Secure & Compliant Data Handling All data is accessed with proper authorization and never shared with third parties.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+    <div class="section-3">
+        <div class="row1 u-center-text">
+            <h1 class="heading-main1">How We Use Facebook Data</h1>
+        </div>
+        <div class="flex-row">
+            <div class="flex-col-img">
+                <img ref="expandRef4" class="section_3_img" :class="{'expand-animation': expandRef4_isInView}" 
+                src="@/assets/image/section_3_img.png" alt="section_3_img">
+            </div>
+            <div class="flex-col-text">
+                <h1 ref="scrollInLeft4" class="sub-title" :class="{'scrollInLeft': scrollInLeft4_isInView}">
+                    Facebook Integration for Secure, Accurate Data
+                </h1>
+                <p class="paragraph1">
+                    Our broadcast analytics platform integrates with the Facebook Graph API to deliver real-time and post-event performance data.
+
+With authorized access, our system retrieves:
+
+Concurrent Live Viewers – real-time viewership numbers during tournaments.
+
+Total Views – combined reach across multiple streams and partners.
+
+Audience Engagement Metrics – reactions, comments, and shares for each broadcast.
+
+Post Performance Metrics – insights into how streams perform after the event.
+
+We strictly follow Facebook’s data privacy and security standards, ensuring that:
+
+Data is only accessed with client permission.
+
+Information is never sold, shared, or used for unrelated purposes.
+
+Insights are presented in secure, private dashboards accessible only by authorized partners.
                 </p>
 
             </div>
@@ -66,36 +118,57 @@
     </div>
     <div class="section-4">
         <div class="row1 u-center-text">
-            <h1 class="heading-main1">What kind of person is wathcing to join ?</h1>
+            <h1 class="heading-main1">Who Benefits from Our Technology</h1>
         </div>
         <div class="flex-row">
             <div class="flex-col-item">
                 <div class="item-box">
                     <h1 class="item-title">
-                       blah blah blah blah blah
+                        Designed for Esports Stakeholders
                     </h1>
                     <p class="item-content">
-                        Game Cast Network can provide games with a full of Entertainment with long-term benefits
+                        Stakeholder Value Provided
+Tournament Organizers Track all live broadcast data in one place for accurate reporting and planning.
+Sponsors & Brands Access clear engagement reports to measure campaign ROI during esports events.
+Game Publishers Understand how tournaments perform on Facebook to optimize future broadcasts.
                     </p>
                 </div>
             </div>
             <div class="flex-col-item">
                 <div class="item-box">
                     <h1 class="item-title">
-                        blah blah blah blah blahb
+                        Global Brands That Rely on Our Insights
                     </h1>
                     <p class="item-content">
-                        Lorem ipsum, dolor sit amet consectetur adipisicing elit. Voluptatibus praesentium hic iusto. Et sit rem autem, architecto odio saepe natus!
+                        We are proud to work with some of the most recognized names in gaming and esports, including:
+
+Moonton (Mobile Legends: Bang Bang)
+
+Tencent (PUBG Mobile)
+
+Infinix
+
+V-Code Energy Drink
                     </p>
                 </div>
             </div>
             <div class="flex-col-item">
                 <div class="item-box">
                     <h1 class="item-title">
-                        blah blah blah blah blah blabh blbahb lbhab
+                        Contact Us
                     </h1>
                     <p class="item-content">
-                       Lorem ipsum, dolor sit amet consectetur adipisicing elit. Doloribus provident voluptatibus veniam optio, doloremque totam eligendi. Quibusdam suscipit nemo error quaerat? Excepturi ex error cupiditate cum, praesentium illum nihil totam.help users improve their personal connections, economy, and status!
+                        Let’s Build Better Esports Analytics Together
+
+Copy:
+Ready to improve your esports broadcasts with real-time analytics?
+Contact us today to discuss how we can help.
+
+Contact Options:
+
+General Inquiries: info@gamecastnetwork.com
+
+Technical Support: dev@gamecastnetwork.com
                     </p>
                 </div>
             </div>
@@ -123,6 +196,10 @@ const expandRef3 = useTemplateRef('expandRef3')
 const expandRef3_isInView = useIntersectionObserver(expandRef3, {
   threshold: 0.01
 })
+const expandRef4 = useTemplateRef('expandRef4')
+const expandRef4_isInView = useIntersectionObserver(expandRef4, {
+  threshold: 0.01
+})
 const scrollInLeft2 = useTemplateRef('scrollInLeft2')
 const scrollInLeft2_isInView = useIntersectionObserver(scrollInLeft2, {threshold: 0.4})
 const scrollInLeft3 = useTemplateRef('scrollInLeft3')
@@ -130,6 +207,9 @@ const scrollInLeft3_isInView = useIntersectionObserver(scrollInLeft3, {threshold
 const isInView = useIntersectionObserver(scrollAnimationRef, {
   threshold: 0.4 // Element is considered "visible" when 20% is in viewport
 })
+const scrollInLeft4 = useTemplateRef('scrollInLeft4')
+const scrollInLeft4_isInView = useIntersectionObserver(scrollInLeft4, {threshold: 0.4})
+
 
 // You can watch the visibility changes
 // watch(isInView, (visible) => {
@@ -168,7 +248,7 @@ onMounted(() => {
     @include scrollAnimation(expandFromCenter);
 }
 .scrollInLeft{
-    @include scrollAnimation(moveInLeft);
+    @include scrollAnimation(moveInRight);
 }
 .scrollInRight{
     @include scrollAnimation(moveInRight);

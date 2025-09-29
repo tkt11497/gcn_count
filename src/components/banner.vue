@@ -4,8 +4,8 @@
       <img src="@/assets/image/banner.jpg" alt="Banner" class="banner-img">
       <div class="banner-content-box">
           <h1 class="heading-primary--main">GCN</h1>
-          <h3 class="heading-primary--sub">Unlock Your Tournaments with Us</h3>
-          <h3 class="heading-primary--sub2"> We unleash the games to create a wonderful world., blha blah blah blah ,Lore!</h3>
+          <h3 class="heading-primary--sub">From Passion to Impact, We Create the Hype!</h3>
+          <h3 class="heading-primary--sub2"> Game Cast Network (GCN) delivers real-time broadcast analytics technology for esports tournaments and live events.</h3>
       </div>
     </div>
   </template>
