@@ -80,7 +80,7 @@ async function connectFacebook() {
     scopes: [
       'pages_show_list',
       'pages_read_engagement',
-      'pages_read_user_content',
+      // 'pages_read_user_content',
       'read_insights'
       // add more if needed, e.g. 
       // 'pages_manage_posts'

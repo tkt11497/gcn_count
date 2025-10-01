@@ -3,6 +3,7 @@
     <div class="header-section">
       <h2 class="title">Live Concurrent Views Dashboard</h2>
       <h2 class="title2">Total View  - {{ totalLiveViewers }}</h2>
+      <h2 class="title2">Total Peak View  - {{ storedPeakViewers }}</h2>
       <button @click="refreshAllPages" class="refresh-all-btn" :disabled="isRefreshing">
         {{ isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh All' }}
       </button>
@@ -10,7 +11,7 @@
 
     <progress v-if="storeNotes.notesloading" class="progress is-large is-success" max="100"></progress>
     <template v-else>
-      <button @click="test(storeNotes.notes[0].id,storeNotes.notes[0].access_token)">test</button>
+      <!-- <button @click="test(storeNotes.notes[0].id,storeNotes.notes[0].access_token)">test</button> -->
       <div class="view_list">
         <div
           v-for="(note,index) in storeNotes.notes"
@@ -111,10 +112,11 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
 import { getLiveVideoData, getPageInsights, getLiveVideoEngagement } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore'
 
 const storeNotes = useStoreNotes()
 const isRefreshing = ref(false)
+const storedPeakViewers = ref(0)
 
 // Returns total live viewers across all pages (sums numeric viewerCount of live items)
 const computeTotalLiveViewers = () => {
@@ -129,6 +131,7 @@ const computeTotalLiveViewers = () => {
     return 0
   }
 }
+
 
 // Reactive total
 const totalLiveViewers = computed(computeTotalLiveViewers)
@@ -145,15 +148,29 @@ const saveTotalToFirestore = async (total) => {
     console.error('Failed saving total to Firestore', e)
   }
 }
+const saveTotalPeakToFirestore = async (total) => {
+  try {
+    const ref = doc(db, 'metrics', 'live_totals')
+    await setDoc(ref, {
+      totalPeakViewers: Number(total) || 0,
+      updatedAt_peak: serverTimestamp()
+    }, { merge: true })
+  } catch (e) {
+    console.error('Failed saving total to Firestore', e)
+  }
+}
 
 watch(totalLiveViewers, (val) => {
   saveTotalToFirestore(val)
+  // Update peak if current total exceeds stored peak
+  const numericVal = Number(val) || 0
+  if (numericVal > (Number(storedPeakViewers.value) || 0)) {
+    storedPeakViewers.value = numericVal
+    saveTotalPeakToFirestore(numericVal)
+  }
 })
 
-const test= async(page_id,page_token)=>{
-  const res=await fetch(`https://graph.facebook.com/v20.0/${page_id}/live_videos?fields=id,status,stream_url&access_token=${page_token}`)
-  console.log(res)
-}
+
 
 
 // Refresh live data for a specific page
@@ -269,10 +286,23 @@ let refreshInterval = null
 
 onMounted(() => {
   // Initial refresh after 2 seconds
-  setTimeout(autoRefreshAllPages, 2000)
+  setTimeout(autoRefreshAllPages, 1000)
+  // Load stored peak from Firestore
+  ;(async () => {
+    try {
+      const refDoc = doc(db, 'metrics', 'live_totals')
+      const snap = await getDoc(refDoc)
+      if (snap.exists()) {
+        const data = snap.data()
+        storedPeakViewers.value = Number(data?.totalPeakViewers) || 0
+      }
+    } catch (e) {
+      console.warn('Failed loading stored peak', e)
+    }
+  })()
   
   // Set up interval for auto-refresh
-  refreshInterval = setInterval(autoRefreshAllPages, 90000) // 90 seconds
+  refreshInterval = setInterval(autoRefreshAllPages, 120000) // 90 seconds
 })
 
 // Clean up interval on unmount

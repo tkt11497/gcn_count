@@ -48,7 +48,10 @@ export const useStoreAuth = defineStore('storeAuth', {
             //this.router.push('/')
           })
           .catch((error) => {
-            console.log('login error',error.message)
+            const message = error?.message || 'Unknown error'
+            const code = error?.code ? ` (${error.code})` : ''
+            alert(`Login failed: ${message}${code}`)
+            console.log('login error', error)
           });
     
     },

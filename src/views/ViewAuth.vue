@@ -15,10 +15,10 @@
             <span class="tab-icon">👤</span>
             Login
           </div>
-          <div class="tab" :class="{ 'active': register }" @click="register = true">
+          <!-- <div class="tab" :class="{ 'active': register }" @click="register = true">
             <span class="tab-icon">📝</span>
             Register
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -70,14 +70,14 @@
         </form>
       </div>
 
-      <div class="footer-section">
+      <!-- <div class="footer-section">
         <div class="auth-info">
           <p>{{ register ? 'Already have an account?' : "Don't have an account?" }}</p>
           <button class="switch-btn" @click="register = !register">
             {{ register ? 'Sign In' : 'Create Account' }}
           </button>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
@@ -98,9 +98,9 @@ const handleSubmit = () => {
         return
     }else {
         if(register.value) {
-            storeAuth.register(form.email, form.password).then(() => {
-                loading.value = false
-            })
+            // storeAuth.register(form.email, form.password).then(() => {
+            //     loading.value = false
+            // })
         }else {
             storeAuth.login(form.email, form.password).then(() => {
                 loading.value = false
