@@ -27,6 +27,15 @@
             >
               {{ note.loading ? '⏳' : '🔄' }}
             </button>
+            <button
+              @click="onDeleteNote(note)"
+              class="refresh-btn"
+              :disabled="note.loading"
+              title="Delete"
+              style="margin-left:8px"
+            >
+              🗑️
+            </button>
           </div>
           
           <div class="page-info">
@@ -311,6 +320,18 @@ onUnmounted(() => {
     clearInterval(refreshInterval)
   }
 })
+
+// Delete a page/note
+const onDeleteNote = async (note) => {
+  if (!note || !note.id) return
+  const ok = window.confirm(`Delete page “${note.name || note.id}”? This cannot be undone.`)
+  if (!ok) return
+  try {
+    await storeNotes.deleteNote(note.id)
+  } catch (e) {
+    alert(`Failed to delete: ${e?.message || 'Unknown error'}`)
+  }
+}
 </script>
 <style lang="css" scoped>
 /* Dark Theme Styles for Live Dashboard */
