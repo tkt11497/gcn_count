@@ -211,13 +211,13 @@ const refreshPageData = async (note) => {
       }
 
       // Fetch engagement (reactions summary + recent comments)
-      try {
-        const engagement = await getLiveVideoEngagement(note.liveData.videoId, note.access_token, { commentLimit: 20 })
-        note.liveData.reactions = engagement.reactions
-        note.liveData.comments = engagement.comments
-      } catch (e) {
-        console.warn('Failed to fetch engagement:', e)
-      }
+      // try {
+      //   const engagement = await getLiveVideoEngagement(note.liveData.videoId, note.access_token, { commentLimit: 20 })
+      //   note.liveData.reactions = engagement.reactions
+      //   note.liveData.comments = engagement.comments
+      // } catch (e) {
+      //   console.warn('Failed to fetch engagement:', e)
+      // }
     } else {
       note.liveData = {
         isLive: false,
