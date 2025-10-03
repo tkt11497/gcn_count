@@ -13,6 +13,27 @@
     <template v-else>
       <!-- <button @click="test(storeNotes.notes[0].id,storeNotes.notes[0].access_token)">test</button> -->
       <div class="view_list">
+        <div v-if="ytChannels.length" class="view_item">
+          <div class="page-header">
+            <h3 class="page-name">YouTube Live</h3>
+            <button @click="refreshYouTubeCounts" class="refresh-btn">🔄</button>
+          </div>
+          <div class="live-stats">
+            <div class="stat-item highlight">
+              <span class="stat-label">Total YT Live Viewers:</span>
+              <span class="stat-value">{{ ytLiveCounts.totalLiveViewers || 0 }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Per Channel:</span>
+              <div class="reactions-grid">
+                <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
+                  <span class="reaction-type">{{ cid }}</span>
+                  <span class="reaction-count">{{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div
           v-for="(note,index) in storeNotes.notes"
           class="view_item"
@@ -119,13 +140,15 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
-import { getLiveVideoData, getPageInsights, getLiveVideoEngagement } from '@/js/facebookAuth'
+import { getLiveVideoData, getPageInsights, getLiveVideoEngagement, fetchYouTubeLiveCounts } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore'
 
 const storeNotes = useStoreNotes()
 const isRefreshing = ref(false)
 const storedPeakViewers = ref(0)
+const ytChannels = ref(['@mlbbesportsmyanmar']) // e.g., ['UC_x5XG1OV2P6uZZ5FSM9Ttw']
+const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
 
 // Returns total live viewers across all pages (sums numeric viewerCount of live items)
 const computeTotalLiveViewers = () => {
@@ -320,6 +343,16 @@ onUnmounted(() => {
     clearInterval(refreshInterval)
   }
 })
+
+// Fetch YouTube live counts (if channels configured)
+const refreshYouTubeCounts = async () => {
+  if (!ytChannels.value.length) return
+  try {
+    ytLiveCounts.value = await fetchYouTubeLiveCounts(ytChannels.value)
+  } catch (e) {
+    console.warn('Failed to fetch YouTube live counts', e)
+  }
+}
 
 // Delete a page/note
 const onDeleteNote = async (note) => {

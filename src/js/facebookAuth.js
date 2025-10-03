@@ -478,4 +478,16 @@ export async function getLiveVideoEngagement(videoId, pageAccessToken, { comment
   return { comments, reactions };
 }
 
+// YouTube helpers
+export async function fetchYouTubeLiveCounts(channelIds = []) {
+  if (!Array.isArray(channelIds) || channelIds.length === 0) return { channels: {}, totalLiveViewers: 0 }
+  const res = await fetch('/api/youtube/live-counts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelIds })
+  })
+  if (!res.ok) throw new Error(`YouTube live-counts error ${res.status}`)
+  return await res.json()
+}
+
  

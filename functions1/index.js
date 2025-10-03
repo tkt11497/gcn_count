@@ -169,3 +169,72 @@ export const healthCheck = onRequest({
     message: 'Facebook token exchange service is running' 
   });
 });
+
+/**
+ * YouTube live viewers for multiple channels.
+ * POST { channelIds: string[] }
+ * Returns { channels: { [channelId]: { live: boolean, viewers: number, videoId: string|null } }, totalLiveViewers }
+ * Requires env YT_API_KEY.
+ */
+export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+  try {
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed. Use POST.' }); return; }
+    const { channelIds } = req.body || {};
+    if (!Array.isArray(channelIds) || channelIds.length === 0) { res.status(400).json({ error: 'channelIds array required' }); return; }
+    const apiKey = process.env.YT_API_KEY;
+    if (!apiKey) { res.status(500).json({ error: 'Missing YT_API_KEY env' }); return; }
+
+    // Step 1: list active live broadcasts for channels
+    // We will query search for each channel with eventType=live & type=video
+    const searchParamsFor = (channelId) => new URLSearchParams({ part: 'id', channelId, eventType: 'live', type: 'video', maxResults: '1', key: apiKey });
+    const searchReqs = channelIds.map(id => fetch(`https://www.googleapis.com/youtube/v3/search?${searchParamsFor(id).toString()}`));
+    const searchRes = await Promise.all(searchReqs);
+    const liveVideoIds = [];
+    const channelToVideo = {};
+    await Promise.all(searchRes.map(async (r, idx) => {
+      if (!r.ok) return;
+      const j = await r.json();
+      const vid = j?.items?.[0]?.id?.videoId || null;
+      if (vid) {
+        liveVideoIds.push(vid);
+        channelToVideo[channelIds[idx]] = vid;
+      } else {
+        channelToVideo[channelIds[idx]] = null;
+      }
+    }));
+
+    let channels = {};
+    let totalLiveViewers = 0;
+    if (liveVideoIds.length > 0) {
+      // Step 2: get concurrent viewers via videos.list liveStreamingDetails
+      const videosParams = new URLSearchParams({ part: 'liveStreamingDetails', id: liveVideoIds.join(','), key: apiKey });
+      const videosRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`);
+      if (videosRes.ok) {
+        const vj = await videosRes.json();
+        const byId = new Map(vj.items.map(it => [it.id, it]));
+        for (const ch of channelIds) {
+          const vid = channelToVideo[ch];
+          if (vid && byId.has(vid)) {
+            const details = byId.get(vid).liveStreamingDetails || {};
+            const vc = Number(details.concurrentViewers || 0);
+            channels[ch] = { live: true, viewers: vc, videoId: vid };
+            totalLiveViewers += vc;
+          } else {
+            channels[ch] = { live: false, viewers: 0, videoId: null };
+          }
+        }
+      }
+    }
+    // Fill non-live channels if any not set
+    for (const ch of channelIds) {
+      if (!channels[ch]) channels[ch] = { live: false, viewers: 0, videoId: null };
+    }
+
+    res.status(200).json({ channels, totalLiveViewers });
+  } catch (error) {
+    console.error('youtubeLiveCounts error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
