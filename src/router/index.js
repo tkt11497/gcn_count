@@ -6,6 +6,7 @@ import ViewAuth from '@/views/ViewAuth.vue'
 import gcn_register from '@/views/gcn_register.vue'
 import privacy_policy from '@/views/privacy_policy.vue'
 import home from '@/views/home.vue'
+import ViewYouTubeConnect from '@/views/ViewYouTubeConnect.vue'
 import { useStoreAuth } from '@/stores/storeAuth'
 
 //const storeAuth = useStoreAuth()
@@ -49,6 +50,11 @@ const routes = [
     path: '/home',
     name: 'home',
     component: home
+  },
+  {
+    path: '/youtube-connect',
+    name: 'youtube-connect',
+    component: ViewYouTubeConnect
   }
 ]
 
@@ -59,7 +65,7 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base']
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base', 'youtube-connect']
   if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }

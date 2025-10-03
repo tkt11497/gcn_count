@@ -49,6 +49,15 @@
           </RouterLink>
           <RouterLink
             @click="showMobileNav = false"
+            to="/youtube-connect"
+            class="nav-link"
+            active-class="nav-active"
+          >
+            <span class="nav-icon">🎥</span>
+            <span class="nav-text">YouTube Connect</span>
+          </RouterLink>
+          <RouterLink
+            @click="showMobileNav = false"
             to="/stats"
             class="nav-link"
             active-class="nav-active"

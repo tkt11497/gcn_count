@@ -478,9 +478,10 @@ export async function getLiveVideoEngagement(videoId, pageAccessToken, { comment
   return { comments, reactions };
 }
 
-// YouTube helpers
-export async function fetchYouTubeLiveCounts(channelIds = []) {
+// YouTube helpers - call Cloud Function
+export async function fetchYouTubeLiveCountsViaCloud(channelIds = []) {
   if (!Array.isArray(channelIds) || channelIds.length === 0) return { channels: {}, totalLiveViewers: 0 }
+  
   const res = await fetch('/api/youtube/live-counts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -488,6 +489,97 @@ export async function fetchYouTubeLiveCounts(channelIds = []) {
   })
   if (!res.ok) throw new Error(`YouTube live-counts error ${res.status}`)
   return await res.json()
+}
+
+// YouTube helpers - direct API calls from frontend
+export async function fetchYouTubeLiveCounts(channelIds = [], apiKey = '') {
+  if (!Array.isArray(channelIds) || channelIds.length === 0) return { channels: {}, totalLiveViewers: 0 }
+  if (!apiKey) throw new Error('YouTube API key required')
+  
+  try {
+    // Step 1: Convert handles to channel IDs if needed, then search for live videos
+    const searchPromises = channelIds.map(async (channelId) => {
+      let actualChannelId = channelId
+      
+      // If it's a handle (starts with @), we need to get the channel ID first
+      if (channelId.startsWith('@')) {
+        const handle = channelId.substring(1)
+        const channelParams = new URLSearchParams({
+          part: 'id',
+          forHandle: handle,
+          key: apiKey
+        })
+        
+        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`)
+        if (!channelRes.ok) return { channelId, videoId: null }
+        
+        const channelData = await channelRes.json()
+        actualChannelId = channelData?.items?.[0]?.id || null
+        if (!actualChannelId) return { channelId, videoId: null }
+      }
+      
+      // Now search for live videos using the actual channel ID
+      const searchParams = new URLSearchParams({
+        part: 'id',
+        channelId: actualChannelId,
+        eventType: 'live',
+        type: 'video',
+        maxResults: '1',
+        key: apiKey
+      })
+      
+      const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`)
+      if (!searchRes.ok) return { channelId, videoId: null }
+      
+      const searchData = await searchRes.json()
+      const videoId = searchData?.items?.[0]?.id?.videoId || null
+      return { channelId, videoId }
+    })
+    
+    const searchResults = await Promise.all(searchPromises)
+    const liveVideoIds = searchResults.filter(r => r.videoId).map(r => r.videoId)
+    const channelToVideo = Object.fromEntries(searchResults.map(r => [r.channelId, r.videoId]))
+    
+    let channels = {}
+    let totalLiveViewers = 0
+    
+    if (liveVideoIds.length > 0) {
+      // Step 2: Get live streaming details for videos
+      const videosParams = new URLSearchParams({
+        part: 'liveStreamingDetails',
+        id: liveVideoIds.join(','),
+        key: apiKey
+      })
+      
+      const videosRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`)
+      if (videosRes.ok) {
+        const videosData = await videosRes.json()
+        const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]))
+        
+        for (const channelId of channelIds) {
+          const videoId = channelToVideo[channelId]
+          if (videoId && videoDetails.has(videoId)) {
+            const details = videoDetails.get(videoId) || {}
+            const viewers = Number(details.concurrentViewers || 0)
+            channels[channelId] = { live: true, viewers, videoId }
+            totalLiveViewers += viewers
+          } else {
+            channels[channelId] = { live: false, viewers: 0, videoId: null }
+          }
+        }
+      }
+    } else {
+      // No live videos found
+      for (const channelId of channelIds) {
+        channels[channelId] = { live: false, viewers: 0, videoId: null }
+      }
+    }
+    
+    return { channels, totalLiveViewers }
+  } catch (error) {
+    console.error('YouTube API error:', error)
+    throw new Error(`YouTube API error: ${error.message}`)
+  }
 }
 
  

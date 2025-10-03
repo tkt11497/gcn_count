@@ -7,6 +7,9 @@
       <button @click="refreshAllPages" class="refresh-all-btn" :disabled="isRefreshing">
         {{ isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh All' }}
       </button>
+      <button @click="testYouTubeAPI" class="refresh-all-btn" style="margin-left: 10px">
+        🧪 Test YouTube API
+      </button>
     </div>
 
     <progress v-if="storeNotes.notesloading" class="progress is-large is-success" max="100"></progress>
@@ -16,7 +19,10 @@
         <div v-if="ytChannels.length" class="view_item">
           <div class="page-header">
             <h3 class="page-name">YouTube Live</h3>
-            <button @click="refreshYouTubeCounts" class="refresh-btn">🔄</button>
+            <div>
+              <button @click="refreshYouTubeCounts" class="refresh-btn">🔄</button>
+              <button @click="$router.push('/youtube-connect')" class="refresh-btn" style="margin-left: 8px">⚙️</button>
+            </div>
           </div>
           <div class="live-stats">
             <div class="stat-item highlight">
@@ -129,10 +135,14 @@
     </template>
     
     <div 
-      v-if="storeNotes.notes.length === 0"
+      v-if="storeNotes.notes.length === 0 && !ytChannels.length"
       class="is-size-4 has-text-centered has-text-grey-light is-family-monospace py-6"
     >
-      No pages found...
+      No pages or YouTube channels found...
+      <br><br>
+      <button @click="$router.push('/youtube-connect')" class="refresh-all-btn">
+        Connect YouTube Channel
+      </button>
     </div>
   </div>
 </template>
@@ -142,13 +152,16 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
 import { getLiveVideoData, getPageInsights, getLiveVideoEngagement, fetchYouTubeLiveCounts } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
+import { useStoreAuth } from '@/stores/storeAuth'
 
 const storeNotes = useStoreNotes()
+const storeAuth = useStoreAuth()
 const isRefreshing = ref(false)
 const storedPeakViewers = ref(0)
-const ytChannels = ref(['@mlbbesportsmyanmar']) // e.g., ['UC_x5XG1OV2P6uZZ5FSM9Ttw']
+const ytChannels = ref([]) // Will be loaded from Firestore
 const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
+const ytApiKey = ref('AIzaSyAZQZl8iWiFBvvKqN5-d7Bw-4P7AHC-nnQ') // YouTube API key for testing
 
 // Returns total live viewers across all pages (sums numeric viewerCount of live items)
 const computeTotalLiveViewers = () => {
@@ -333,8 +346,16 @@ onMounted(() => {
     }
   })()
   
+  // Load YouTube channels and fetch counts
+  loadYouTubeChannels().then(() => {
+    refreshYouTubeCounts()
+  })
+  
   // Set up interval for auto-refresh
-  refreshInterval = setInterval(autoRefreshAllPages, 120000) // 90 seconds
+  refreshInterval = setInterval(() => {
+    autoRefreshAllPages()
+    refreshYouTubeCounts()
+  }, 120000) // 2 minutes
 })
 
 // Clean up interval on unmount
@@ -344,20 +365,47 @@ onUnmounted(() => {
   }
 })
 
+// Load connected YouTube channels from Firestore
+const loadYouTubeChannels = async () => {
+  try {
+    const channelsRef = collection(db, 'youtube_channels')
+    const snapshot = await getDocs(channelsRef)
+    ytChannels.value = snapshot.docs.map(doc => doc.id)
+  } catch (e) {
+    console.warn('Failed to load YouTube channels', e)
+  }
+}
+
 // Fetch YouTube live counts (if channels configured)
 const refreshYouTubeCounts = async () => {
   if (!ytChannels.value.length) return
   try {
-    ytLiveCounts.value = await fetchYouTubeLiveCounts(ytChannels.value)
+    // Use Cloud Function instead of direct API
+    console.log(ytChannels.value,ytApiKey.value)
+    ytLiveCounts.value = await fetchYouTubeLiveCounts(ytChannels.value,ytApiKey.value)
   } catch (e) {
     console.warn('Failed to fetch YouTube live counts', e)
+  }
+}
+
+// Test YouTube API function
+const testYouTubeAPI = async () => {
+  try {
+    console.log('Testing YouTube API via Cloud Function...')
+    const testChannels = ['@mlbbesportsmyanmar'] // Test with a known channel
+    const result = await fetchYouTubeLiveCounts(testChannels,ytApiKey.value)
+    console.log('YouTube API Response:', result)
+    alert(`YouTube API Test Result:\n${JSON.stringify(result, null, 2)}`)
+  } catch (e) {
+    console.error('YouTube API Test Error:', e)
+    alert(`YouTube API Test Failed:\n${e.message}`)
   }
 }
 
 // Delete a page/note
 const onDeleteNote = async (note) => {
   if (!note || !note.id) return
-  const ok = window.confirm(`Delete page “${note.name || note.id}”? This cannot be undone.`)
+  const ok = window.confirm(`Delete page "${note.name || note.id}"? This cannot be undone.`)
   if (!ok) return
   try {
     await storeNotes.deleteNote(note.id)
@@ -599,10 +647,19 @@ const onDeleteNote = async (note) => {
 }
 
 .reactions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+  
+  
+  .reaction-pill {
+    flex-shrink: 0;
+    min-width: 80px;
+  }
 }
 
 .reaction-pill {

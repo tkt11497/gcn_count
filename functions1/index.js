@@ -175,6 +175,7 @@ export const healthCheck = onRequest({
  * POST { channelIds: string[] }
  * Returns { channels: { [channelId]: { live: boolean, viewers: number, videoId: string|null } }, totalLiveViewers }
  * Requires env YT_API_KEY.
+ * Supports both channel IDs (UC...) and handles (@username).
  */
 export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
   setCors(res);
@@ -186,50 +187,81 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
     const apiKey = process.env.YT_API_KEY;
     if (!apiKey) { res.status(500).json({ error: 'Missing YT_API_KEY env' }); return; }
 
-    // Step 1: list active live broadcasts for channels
-    // We will query search for each channel with eventType=live & type=video
-    const searchParamsFor = (channelId) => new URLSearchParams({ part: 'id', channelId, eventType: 'live', type: 'video', maxResults: '1', key: apiKey });
-    const searchReqs = channelIds.map(id => fetch(`https://www.googleapis.com/youtube/v3/search?${searchParamsFor(id).toString()}`));
-    const searchRes = await Promise.all(searchReqs);
-    const liveVideoIds = [];
-    const channelToVideo = {};
-    await Promise.all(searchRes.map(async (r, idx) => {
-      if (!r.ok) return;
-      const j = await r.json();
-      const vid = j?.items?.[0]?.id?.videoId || null;
-      if (vid) {
-        liveVideoIds.push(vid);
-        channelToVideo[channelIds[idx]] = vid;
-      } else {
-        channelToVideo[channelIds[idx]] = null;
+    // Step 1: Convert handles to channel IDs if needed, then search for live videos
+    const searchPromises = channelIds.map(async (channelId) => {
+      let actualChannelId = channelId;
+      
+      // If it's a handle (starts with @), we need to get the channel ID first
+      if (channelId.startsWith('@')) {
+        const handle = channelId.substring(1);
+        const channelParams = new URLSearchParams({
+          part: 'id',
+          forHandle: handle,
+          key: apiKey
+        });
+        
+        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
+        if (!channelRes.ok) return { channelId, videoId: null };
+        
+        const channelData = await channelRes.json();
+        actualChannelId = channelData?.items?.[0]?.id || null;
+        if (!actualChannelId) return { channelId, videoId: null };
       }
-    }));
+      
+      // Now search for live videos using the actual channel ID
+      const searchParams = new URLSearchParams({
+        part: 'id',
+        channelId: actualChannelId,
+        eventType: 'live',
+        type: 'video',
+        maxResults: '1',
+        key: apiKey
+      });
+      
+      const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`);
+      if (!searchRes.ok) return { channelId, videoId: null };
+      
+      const searchData = await searchRes.json();
+      const videoId = searchData?.items?.[0]?.id?.videoId || null;
+      return { channelId, videoId };
+    });
+
+    const searchResults = await Promise.all(searchPromises);
+    const liveVideoIds = searchResults.filter(r => r.videoId).map(r => r.videoId);
+    const channelToVideo = Object.fromEntries(searchResults.map(r => [r.channelId, r.videoId]));
 
     let channels = {};
     let totalLiveViewers = 0;
     if (liveVideoIds.length > 0) {
-      // Step 2: get concurrent viewers via videos.list liveStreamingDetails
-      const videosParams = new URLSearchParams({ part: 'liveStreamingDetails', id: liveVideoIds.join(','), key: apiKey });
+      // Step 2: Get live streaming details for videos
+      const videosParams = new URLSearchParams({
+        part: 'liveStreamingDetails',
+        id: liveVideoIds.join(','),
+        key: apiKey
+      });
+      
       const videosRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`);
       if (videosRes.ok) {
-        const vj = await videosRes.json();
-        const byId = new Map(vj.items.map(it => [it.id, it]));
-        for (const ch of channelIds) {
-          const vid = channelToVideo[ch];
-          if (vid && byId.has(vid)) {
-            const details = byId.get(vid).liveStreamingDetails || {};
-            const vc = Number(details.concurrentViewers || 0);
-            channels[ch] = { live: true, viewers: vc, videoId: vid };
-            totalLiveViewers += vc;
+        const videosData = await videosRes.json();
+        const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]));
+        
+        for (const channelId of channelIds) {
+          const videoId = channelToVideo[channelId];
+          if (videoId && videoDetails.has(videoId)) {
+            const details = videoDetails.get(videoId) || {};
+            const viewers = Number(details.concurrentViewers || 0);
+            channels[channelId] = { live: true, viewers, videoId };
+            totalLiveViewers += viewers;
           } else {
-            channels[ch] = { live: false, viewers: 0, videoId: null };
+            channels[channelId] = { live: false, viewers: 0, videoId: null };
           }
         }
       }
-    }
-    // Fill non-live channels if any not set
-    for (const ch of channelIds) {
-      if (!channels[ch]) channels[ch] = { live: false, viewers: 0, videoId: null };
+    } else {
+      // No live videos found
+      for (const channelId of channelIds) {
+        channels[channelId] = { live: false, viewers: 0, videoId: null };
+      }
     }
 
     res.status(200).json({ channels, totalLiveViewers });
