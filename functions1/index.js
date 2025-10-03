@@ -170,12 +170,17 @@ export const healthCheck = onRequest({
   });
 });
 
+// Cache for YouTube live video searches (40 minutes = 2400000 ms)
+const youtubeSearchCache = new Map();
+const CACHE_DURATION = 40 * 60 * 1000; // 40 minutes in milliseconds
+
 /**
  * YouTube live viewers for multiple channels.
  * POST { channelIds: string[] }
  * Returns { channels: { [channelId]: { live: boolean, viewers: number, videoId: string|null } }, totalLiveViewers }
  * Requires env YT_API_KEY.
  * Supports both channel IDs (UC...) and handles (@username).
+ * Uses 40-minute caching to reduce API usage.
  */
 export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
   setCors(res);
@@ -187,53 +192,86 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
     const apiKey = process.env.YT_API_KEY;
     if (!apiKey) { res.status(500).json({ error: 'Missing YT_API_KEY env' }); return; }
 
-    // Step 1: Convert handles to channel IDs if needed, then search for live videos
-    const searchPromises = channelIds.map(async (channelId) => {
-      let actualChannelId = channelId;
+    const now = Date.now();
+    let searchResults = [];
+    let needsSearch = false;
+    
+    // Check cache for each channel
+    for (const channelId of channelIds) {
+      const cacheKey = `search_${channelId}`;
+      const cached = youtubeSearchCache.get(cacheKey);
       
-      // If it's a handle (starts with @), we need to get the channel ID first
-      if (channelId.startsWith('@')) {
-        const handle = channelId.substring(1);
-        const channelParams = new URLSearchParams({
+      if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+        // Use cached result
+        searchResults.push(cached.data);
+      } else {
+        // Need to search for this channel
+        needsSearch = true;
+        break;
+      }
+    }
+    
+    // If we have cached results for all channels, use them
+    if (!needsSearch && searchResults.length === channelIds.length) {
+      console.log('Using cached YouTube search results');
+    } else {
+      console.log('Performing fresh YouTube search (cache expired or missing)');
+      // Step 1: Convert handles to channel IDs if needed, then search for live videos
+      const searchPromises = channelIds.map(async (channelId) => {
+        let actualChannelId = channelId;
+        
+        // If it's a handle (starts with @), we need to get the channel ID first
+        if (channelId.startsWith('@')) {
+          const handle = channelId.substring(1);
+          const channelParams = new URLSearchParams({
+            part: 'id',
+            forHandle: handle,
+            key: apiKey
+          });
+          
+          const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
+          if (!channelRes.ok) return { channelId, videoId: null };
+          
+          const channelData = await channelRes.json();
+          actualChannelId = channelData?.items?.[0]?.id || null;
+          if (!actualChannelId) return { channelId, videoId: null };
+        }
+        
+        // Now search for live videos using the actual channel ID
+        const searchParams = new URLSearchParams({
           part: 'id',
-          forHandle: handle,
+          channelId: actualChannelId,
+          eventType: 'live',
+          type: 'video',
+          maxResults: '1',
           key: apiKey
         });
         
-        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
-        if (!channelRes.ok) return { channelId, videoId: null };
+        const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`);
+        if (!searchRes.ok) return { channelId, videoId: null };
         
-        const channelData = await channelRes.json();
-        actualChannelId = channelData?.items?.[0]?.id || null;
-        if (!actualChannelId) return { channelId, videoId: null };
-      }
-      
-      // Now search for live videos using the actual channel ID
-      const searchParams = new URLSearchParams({
-        part: 'id',
-        channelId: actualChannelId,
-        eventType: 'live',
-        type: 'video',
-        maxResults: '1',
-        key: apiKey
+        const searchData = await searchRes.json();
+        const videoId = searchData?.items?.[0]?.id?.videoId || null;
+        
+        // Cache the search result
+        const cacheKey = `search_${channelId}`;
+        youtubeSearchCache.set(cacheKey, {
+          data: { channelId, videoId },
+          timestamp: now
+        });
+        
+        return { channelId, videoId };
       });
       
-      const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`);
-      if (!searchRes.ok) return { channelId, videoId: null };
-      
-      const searchData = await searchRes.json();
-      const videoId = searchData?.items?.[0]?.id?.videoId || null;
-      return { channelId, videoId };
-    });
-
-    const searchResults = await Promise.all(searchPromises);
+      searchResults = await Promise.all(searchPromises);
+    }
     const liveVideoIds = searchResults.filter(r => r.videoId).map(r => r.videoId);
     const channelToVideo = Object.fromEntries(searchResults.map(r => [r.channelId, r.videoId]));
 
     let channels = {};
     let totalLiveViewers = 0;
     if (liveVideoIds.length > 0) {
-      // Step 2: Get live streaming details for videos
+      // Step 2: Get live streaming details for videos (this is called more frequently)
       const videosParams = new URLSearchParams({
         part: 'liveStreamingDetails',
         id: liveVideoIds.join(','),

@@ -7,9 +7,9 @@
       <button @click="refreshAllPages" class="refresh-all-btn" :disabled="isRefreshing">
         {{ isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh All' }}
       </button>
-      <button @click="testYouTubeAPI" class="refresh-all-btn" style="margin-left: 10px">
+      <!-- <button @click="testYouTubeAPI" class="refresh-all-btn" style="margin-left: 10px">
         🧪 Test YouTube API
-      </button>
+      </button> -->
     </div>
 
     <progress v-if="storeNotes.notesloading" class="progress is-large is-success" max="100"></progress>
@@ -31,12 +31,15 @@
             </div>
             <div class="stat-item">
               <span class="stat-label">Per Channel:</span>
-              <div class="reactions-grid">
-                <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
-                  <span class="reaction-type">{{ cid }}</span>
-                  <span class="reaction-count">{{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}</span>
+                <div class="reactions-grid">
+                  <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
+                    <span class="reaction-type">{{ cid }}</span>
+                    <span class="reaction-count">
+                      {{ ytLiveCounts.channels?.[cid]?.live ? '🔴 LIVE' : '⚫ Offline' }}
+                      {{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}
+                    </span>
+                  </div>
                 </div>
-              </div>
             </div>
           </div>
         </div>
@@ -163,15 +166,21 @@ const ytChannels = ref([]) // Will be loaded from Firestore
 const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
 const ytApiKey = ref('') // YouTube API key for testing
 
-// Returns total live viewers across all pages (sums numeric viewerCount of live items)
+// Returns total live viewers across all pages and YouTube channels
 const computeTotalLiveViewers = () => {
   try {
-    return storeNotes.notes.reduce((sum, note) => {
+    // Facebook pages viewers
+    const facebookViewers = storeNotes.notes.reduce((sum, note) => {
       const isLive = note && note.liveData && note.liveData.isLive
       const raw = isLive ? Number(note.liveData.viewerCount) : 0
       const add = Number.isFinite(raw) ? raw : 0
       return sum + add
     }, 0)
+    
+    // YouTube viewers
+    const youtubeViewers = Number(ytLiveCounts.value.totalLiveViewers) || 0
+    
+    return facebookViewers + youtubeViewers
   } catch (_) {
     return 0
   }
@@ -214,6 +223,20 @@ watch(totalLiveViewers, (val) => {
     saveTotalPeakToFirestore(numericVal)
   }
 })
+
+// Also watch YouTube counts to update totals
+watch(ytLiveCounts, () => {
+  // Trigger total recalculation when YouTube counts change
+  const currentTotal = computeTotalLiveViewers()
+  saveTotalToFirestore(currentTotal)
+  
+  // Update peak if current total exceeds stored peak
+  const numericVal = Number(currentTotal) || 0
+  if (numericVal > (Number(storedPeakViewers.value) || 0)) {
+    storedPeakViewers.value = numericVal
+    saveTotalPeakToFirestore(numericVal)
+  }
+}, { deep: true })
 
 
 
