@@ -229,12 +229,23 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
             key: apiKey
           });
           
-          const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
-          if (!channelRes.ok) return { channelId, videoId: null };
-          
-          const channelData = await channelRes.json();
-          actualChannelId = channelData?.items?.[0]?.id || null;
-          if (!actualChannelId) return { channelId, videoId: null };
+        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
+        if (!channelRes.ok) {
+          console.error(`YouTube channels API error for ${channelId}:`, channelRes.status, channelRes.statusText);
+          return { channelId, videoId: null };
+        }
+        
+        const channelData = await channelRes.json();
+        if (channelData.error) {
+          console.error(`YouTube channels API error for ${channelId}:`, channelData.error);
+          return { channelId, videoId: null };
+        }
+        
+        actualChannelId = channelData?.items?.[0]?.id || null;
+        if (!actualChannelId) {
+          console.error(`No channel ID found for handle ${channelId}`);
+          return { channelId, videoId: null };
+        }
         }
         
         // Now search for live videos using the actual channel ID
@@ -248,9 +259,17 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
         });
         
         const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`);
-        if (!searchRes.ok) return { channelId, videoId: null };
+        if (!searchRes.ok) {
+          console.error(`YouTube search API error for ${channelId}:`, searchRes.status, searchRes.statusText);
+          return { channelId, videoId: null };
+        }
         
         const searchData = await searchRes.json();
+        if (searchData.error) {
+          console.error(`YouTube search API error for ${channelId}:`, searchData.error);
+          return { channelId, videoId: null };
+        }
+        
         const videoId = searchData?.items?.[0]?.id?.videoId || null;
         
         // Cache the search result
@@ -281,19 +300,25 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
       const videosRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`);
       if (videosRes.ok) {
         const videosData = await videosRes.json();
-        const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]));
-        
-        for (const channelId of channelIds) {
-          const videoId = channelToVideo[channelId];
-          if (videoId && videoDetails.has(videoId)) {
-            const details = videoDetails.get(videoId) || {};
-            const viewers = Number(details.concurrentViewers || 0);
-            channels[channelId] = { live: true, viewers, videoId };
-            totalLiveViewers += viewers;
-          } else {
-            channels[channelId] = { live: false, viewers: 0, videoId: null };
+        if (videosData.error) {
+          console.error('YouTube videos API error:', videosData.error);
+        } else {
+          const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]));
+          
+          for (const channelId of channelIds) {
+            const videoId = channelToVideo[channelId];
+            if (videoId && videoDetails.has(videoId)) {
+              const details = videoDetails.get(videoId) || {};
+              const viewers = Number(details.concurrentViewers || 0);
+              channels[channelId] = { live: true, viewers, videoId };
+              totalLiveViewers += viewers;
+            } else {
+              channels[channelId] = { live: false, viewers: 0, videoId: null };
+            }
           }
         }
+      } else {
+        console.error('YouTube videos API HTTP error:', videosRes.status, videosRes.statusText);
       }
     } else {
       // No live videos found
