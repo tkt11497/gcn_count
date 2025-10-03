@@ -150,7 +150,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
-import { getLiveVideoData, getPageInsights, getLiveVideoEngagement, fetchYouTubeLiveCounts } from '@/js/facebookAuth'
+import { getLiveVideoData, getPageInsights, getLiveVideoEngagement, fetchYouTubeLiveCounts, fetchYouTubeLiveCountsViaCloud } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
 import { doc, setDoc, serverTimestamp, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { useStoreAuth } from '@/stores/storeAuth'
@@ -161,7 +161,7 @@ const isRefreshing = ref(false)
 const storedPeakViewers = ref(0)
 const ytChannels = ref([]) // Will be loaded from Firestore
 const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
-const ytApiKey = ref('AIzaSyAZQZl8iWiFBvvKqN5-d7Bw-4P7AHC-nnQ') // YouTube API key for testing
+const ytApiKey = ref('') // YouTube API key for testing
 
 // Returns total live viewers across all pages (sums numeric viewerCount of live items)
 const computeTotalLiveViewers = () => {
@@ -382,7 +382,7 @@ const refreshYouTubeCounts = async () => {
   try {
     // Use Cloud Function instead of direct API
     console.log(ytChannels.value,ytApiKey.value)
-    ytLiveCounts.value = await fetchYouTubeLiveCounts(ytChannels.value,ytApiKey.value)
+    ytLiveCounts.value = await fetchYouTubeLiveCountsViaCloud(ytChannels.value)
   } catch (e) {
     console.warn('Failed to fetch YouTube live counts', e)
   }
