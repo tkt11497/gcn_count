@@ -31,15 +31,18 @@
             </div>
             <div class="stat-item">
               <span class="stat-label">Per Channel:</span>
-                <div class="reactions-grid">
-                  <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
-                    <span class="reaction-type">{{ cid }}</span>
-                    <span class="reaction-count">
-                      {{ ytLiveCounts.channels?.[cid]?.live ? '🔴 LIVE' : '⚫ Offline' }}
-                      {{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}
-                    </span>
-                  </div>
+              <div v-if="ytError" class="error-message">
+                ❌ YouTube Error: {{ ytError }}
+              </div>
+              <div v-else class="reactions-grid">
+                <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
+                  <span class="reaction-type">{{ cid }}</span>
+                  <span class="reaction-count">
+                    {{ ytLiveCounts.channels?.[cid]?.live ? '🔴 LIVE' : '⚫ Offline' }}
+                    {{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}
+                  </span>
                 </div>
+              </div>
             </div>
           </div>
         </div>
@@ -165,6 +168,7 @@ const storedPeakViewers = ref(0)
 const ytChannels = ref([]) // Will be loaded from Firestore
 const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
 const ytApiKey = ref('') // YouTube API key for testing
+const ytError = ref('') // YouTube API error message
 
 // Returns total live viewers across all pages and YouTube channels
 const computeTotalLiveViewers = () => {
@@ -403,11 +407,17 @@ const loadYouTubeChannels = async () => {
 const refreshYouTubeCounts = async () => {
   if (!ytChannels.value.length) return
   try {
+    // Clear any previous errors
+    ytError.value = ''
     // Use Cloud Function instead of direct API
     console.log(ytChannels.value,ytApiKey.value)
     ytLiveCounts.value = await fetchYouTubeLiveCountsViaCloud(ytChannels.value)
   } catch (e) {
-    console.warn('Failed to fetch YouTube live counts', e)
+    console.error('Failed to fetch YouTube live counts', e)
+    // Store error for display
+    ytError.value = e.message
+    // Set empty data to prevent UI issues
+    ytLiveCounts.value = { channels: {}, totalLiveViewers: 0 }
   }
 }
 
@@ -829,6 +839,20 @@ button[onclick*="test"] {
 button[onclick*="test"]:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* Error message styling */
+.error-message {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 10px 0;
+  font-size: 0.9em;
+  font-weight: 500;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* Empty state styling */

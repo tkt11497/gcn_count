@@ -330,6 +330,11 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
     res.status(200).json({ channels, totalLiveViewers });
   } catch (error) {
     console.error('youtubeLiveCounts error:', error);
-    res.status(500).json({ error: 'Internal server error', message: error.message });
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message,
+      channels: {},
+      totalLiveViewers: 0
+    });
   }
 });

@@ -482,13 +482,25 @@ export async function getLiveVideoEngagement(videoId, pageAccessToken, { comment
 export async function fetchYouTubeLiveCountsViaCloud(channelIds = []) {
   if (!Array.isArray(channelIds) || channelIds.length === 0) return { channels: {}, totalLiveViewers: 0 }
   
-  const res = await fetch('/api/youtube/live-counts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelIds })
-  })
-  if (!res.ok) throw new Error(`YouTube live-counts error ${res.status}`)
-  return await res.json()
+  try {
+    const res = await fetch('/api/youtube/live-counts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelIds })
+    })
+    
+    const data = await res.json()
+    
+    if (!res.ok) {
+      console.error('YouTube Cloud Function error:', data)
+      throw new Error(data.message || `YouTube live-counts error ${res.status}`)
+    }
+    
+    return data
+  } catch (error) {
+    console.error('YouTube API fetch error:', error)
+    throw error
+  }
 }
 
 // YouTube helpers - direct API calls from frontend
