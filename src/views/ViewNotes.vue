@@ -341,6 +341,7 @@ const refreshAllPages = async () => {
     for (const note of storeNotes.notes) {
       await refreshPageData(note)
     }
+    await refreshYouTubeCounts()
   } finally {
     isRefreshing.value = false
   }
@@ -375,7 +376,7 @@ onMounted(() => {
   
   // Load YouTube channels and fetch counts
   loadYouTubeChannels().then(() => {
-    refreshYouTubeCounts()
+    //refreshYouTubeCounts()
   })
   
   // Set up interval for auto-refresh

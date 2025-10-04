@@ -174,6 +174,44 @@ export const healthCheck = onRequest({
 const youtubeSearchCache = new Map();
 const CACHE_DURATION = 40 * 60 * 1000; // 40 minutes in milliseconds
 
+// Helper function to make API calls with fallback
+async function makeYouTubeAPICall(url, apiKey, apiKey2 = null) {
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    // Check if quota exceeded
+    if (data.error && data.error.code === 403 && data.error.errors && 
+        data.error.errors.some(err => err.reason === 'quotaExceeded')) {
+      
+      console.log('Primary API key quota exceeded, trying fallback...');
+      
+      if (apiKey2) {
+        // Replace API key in URL and try again
+        const fallbackUrl = url.replace(`key=${apiKey}`, `key=${apiKey2}`);
+        const fallbackResponse = await fetch(fallbackUrl);
+        const fallbackData = await fallbackResponse.json();
+        
+        if (fallbackData.error && fallbackData.error.code === 403 && 
+            fallbackData.error.errors && fallbackData.error.errors.some(err => err.reason === 'quotaExceeded')) {
+          console.error('Both API keys quota exceeded');
+          return { error: 'All API keys quota exceeded', data: fallbackData };
+        }
+        
+        return { data: fallbackData, usedFallback: true };
+      } else {
+        console.error('No fallback API key available');
+        return { error: 'Quota exceeded and no fallback key', data };
+      }
+    }
+    
+    return { data, usedFallback: false };
+  } catch (error) {
+    console.error('API call error:', error);
+    return { error: error.message, data: null };
+  }
+}
+
 /**
  * YouTube live viewers for multiple channels.
  * POST { channelIds: string[] }
@@ -190,6 +228,7 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
     const { channelIds } = req.body || {};
     if (!Array.isArray(channelIds) || channelIds.length === 0) { res.status(400).json({ error: 'channelIds array required' }); return; }
     const apiKey = process.env.YT_API_KEY;
+    const apiKey2 = process.env.YT_API_KEY_2; // Second API key for fallback
     if (!apiKey) { res.status(500).json({ error: 'Missing YT_API_KEY env' }); return; }
 
     const now = Date.now();
@@ -229,17 +268,15 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
             key: apiKey
           });
           
-        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`);
-        if (!channelRes.ok) {
-          console.error(`YouTube channels API error for ${channelId}:`, channelRes.status, channelRes.statusText);
+        const channelUrl = `https://www.googleapis.com/youtube/v3/channels?${channelParams.toString()}`;
+        const channelResult = await makeYouTubeAPICall(channelUrl, apiKey, apiKey2);
+        
+        if (channelResult.error) {
+          console.error(`YouTube channels API error for ${channelId}:`, channelResult.error);
           return { channelId, videoId: null };
         }
         
-        const channelData = await channelRes.json();
-        if (channelData.error) {
-          console.error(`YouTube channels API error for ${channelId}:`, channelData.error);
-          return { channelId, videoId: null };
-        }
+        const channelData = channelResult.data;
         
         actualChannelId = channelData?.items?.[0]?.id || null;
         if (!actualChannelId) {
@@ -258,17 +295,15 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
           key: apiKey
         });
         
-        const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`);
-        if (!searchRes.ok) {
-          console.error(`YouTube search API error for ${channelId}:`, searchRes.status, searchRes.statusText);
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?${searchParams.toString()}`;
+        const searchResult = await makeYouTubeAPICall(searchUrl, apiKey, apiKey2);
+        
+        if (searchResult.error) {
+          console.error(`YouTube search API error for ${channelId}:`, searchResult.error);
           return { channelId, videoId: null };
         }
         
-        const searchData = await searchRes.json();
-        if (searchData.error) {
-          console.error(`YouTube search API error for ${channelId}:`, searchData.error);
-          return { channelId, videoId: null };
-        }
+        const searchData = searchResult.data;
         
         const videoId = searchData?.items?.[0]?.id?.videoId || null;
         
@@ -279,7 +314,7 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
           timestamp: now
         });
         
-        return { channelId, videoId };
+        return { channelId, videoId, usedFallback: searchResult.usedFallback };
       });
       
       searchResults = await Promise.all(searchPromises);
@@ -297,28 +332,26 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
         key: apiKey
       });
       
-      const videosRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`);
-      if (videosRes.ok) {
-        const videosData = await videosRes.json();
-        if (videosData.error) {
-          console.error('YouTube videos API error:', videosData.error);
-        } else {
-          const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]));
-          
-          for (const channelId of channelIds) {
-            const videoId = channelToVideo[channelId];
-            if (videoId && videoDetails.has(videoId)) {
-              const details = videoDetails.get(videoId) || {};
-              const viewers = Number(details.concurrentViewers || 0);
-              channels[channelId] = { live: true, viewers, videoId };
-              totalLiveViewers += viewers;
-            } else {
-              channels[channelId] = { live: false, viewers: 0, videoId: null };
-            }
+      const videosUrl = `https://www.googleapis.com/youtube/v3/videos?${videosParams.toString()}`;
+      const videosResult = await makeYouTubeAPICall(videosUrl, apiKey, apiKey2);
+      
+      if (videosResult.error) {
+        console.error('YouTube videos API error:', videosResult.error);
+      } else {
+        const videosData = videosResult.data;
+        const videoDetails = new Map(videosData.items.map(item => [item.id, item.liveStreamingDetails]));
+        
+        for (const channelId of channelIds) {
+          const videoId = channelToVideo[channelId];
+          if (videoId && videoDetails.has(videoId)) {
+            const details = videoDetails.get(videoId) || {};
+            const viewers = Number(details.concurrentViewers || 0);
+            channels[channelId] = { live: true, viewers, videoId };
+            totalLiveViewers += viewers;
+          } else {
+            channels[channelId] = { live: false, viewers: 0, videoId: null };
           }
         }
-      } else {
-        console.error('YouTube videos API HTTP error:', videosRes.status, videosRes.statusText);
       }
     } else {
       // No live videos found
@@ -327,6 +360,12 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
       }
     }
 
+    // Log if fallback was used
+    const usedFallback = searchResults.some(result => result.usedFallback);
+    if (usedFallback) {
+      console.log('Used fallback API key for some requests');
+    }
+    
     res.status(200).json({ channels, totalLiveViewers });
   } catch (error) {
     console.error('youtubeLiveCounts error:', error);
