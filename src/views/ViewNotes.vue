@@ -36,10 +36,15 @@
               </div>
               <div v-else class="reactions-grid">
                 <div class="reaction-pill" v-for="cid in ytChannels" :key="cid">
-                  <span class="reaction-type">{{ cid }}</span>
+                  <span class="reaction-type">
+                    {{ ytChannelNames[cid] || cid }}
+                    <br>
+                    <small class="channel-id" style="opacity: 0.7;">{{ cid }}</small>
+                  </span>
                   <span class="reaction-count">
                     {{ ytLiveCounts.channels?.[cid]?.live ? '🔴 LIVE' : '⚫ Offline' }}
-                    {{ ytLiveCounts.channels?.[cid]?.viewers || 0 }}
+                    <br>
+                    {{ ytLiveCounts.channels?.[cid]?.viewers || 0 }} viewers
                   </span>
                 </div>
               </div>
@@ -166,6 +171,7 @@ const storeAuth = useStoreAuth()
 const isRefreshing = ref(false)
 const storedPeakViewers = ref(0)
 const ytChannels = ref([]) // Will be loaded from Firestore
+const ytChannelNames = ref({}) // Channel ID to name mapping
 const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
 const ytApiKey = ref('') // YouTube API key for testing
 const ytError = ref('') // YouTube API error message
@@ -399,6 +405,14 @@ const loadYouTubeChannels = async () => {
     const channelsRef = collection(db, 'youtube_channels')
     const snapshot = await getDocs(channelsRef)
     ytChannels.value = snapshot.docs.map(doc => doc.id)
+    
+    // Load channel names from Firestore
+    const channelNames = {}
+    snapshot.docs.forEach(doc => {
+      const data = doc.data()
+      channelNames[doc.id] = data.name || doc.id // Use stored name or fallback to ID
+    })
+    ytChannelNames.value = channelNames
   } catch (e) {
     console.warn('Failed to load YouTube channels', e)
   }
@@ -700,15 +714,27 @@ const onDeleteNote = async (note) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: #1e1e2e;
   border: 1px solid #3d3d4f;
   border-radius: 8px;
   font-size: 0.85em;
+  min-height: 60px;
+  text-align: center;
 }
 
 .reaction-type {
   color: #a0a0a0;
+}
+
+.channel-id {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 0.75em;
 }
 
 .reaction-count {

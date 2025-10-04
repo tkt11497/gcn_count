@@ -261,6 +261,7 @@ export const youtubeLiveCounts = onRequest({ cors: true, maxInstances: 10 }, asy
         
         // If it's a handle (starts with @), we need to get the channel ID first
         if (channelId.startsWith('@')) {
+          console.log('Converting handle to channel ID:', channelId);
           const handle = channelId.substring(1);
           const channelParams = new URLSearchParams({
             part: 'id',
