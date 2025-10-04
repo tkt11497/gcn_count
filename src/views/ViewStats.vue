@@ -17,10 +17,11 @@
     <div class="pages-section">
       <h3 class="section-title">📄 Connected Facebook Pages</h3>
       <div class="pages-grid" v-if="storeNotes.notes.length > 0">
-        <div class="page-card" v-for="note in storeNotes.notes" :key="note.id">
+        <div class="page-card" v-for="note in sortedPages" :key="note.id">
           <div class="page-info">
             <div class="page-name">{{ note.name || 'Untitled Page' }}</div>
             <div class="page-id">{{ note.id }}</div>
+            <div class="page-id">{{ note.updatedAt.toDate().toLocaleString() }}</div>
           </div>
         </div>
       </div>
@@ -32,10 +33,11 @@
     <div class="channels-section">
       <h3 class="section-title">📺 Connected YouTube Channels</h3>
       <div class="channels-grid" v-if="ytChannels.length > 0">
-        <div class="channel-card" v-for="channelId in ytChannels" :key="channelId">
+        <div class="channel-card" v-for="channel in sortedChannels" :key="channel.id">
           <div class="channel-info">
-            <div class="channel-name">{{ ytChannelNames[channelId] || channelId }}</div>
-            <div class="channel-id">{{ channelId }}</div>
+            <div class="channel-name">{{ channel.name || channel.id }}</div>
+            <div class="channel-id">{{ channel.id }}</div>
+            <div class="channel-id">{{ channel.connectedAt.toDate().toLocaleString() }}</div>
           </div>
         </div>
       </div>
@@ -52,7 +54,7 @@
   imports
 */
 
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, computed } from 'vue'
   import { useStoreNotes } from '@/stores/storeNotes'
   import { db } from '@/js/firebase'
   import { collection, getDocs } from 'firebase/firestore'
@@ -69,6 +71,7 @@
 
   const ytChannels = ref([])
   const ytChannelNames = ref({})
+  const ytChannelData = ref([]) // Store full channel data with timestamps
   const ytLiveCounts = ref({ channels: {}, totalLiveViewers: 0 })
 
 /*
@@ -81,17 +84,44 @@
       const snapshot = await getDocs(channelsRef)
       ytChannels.value = snapshot.docs.map(doc => doc.id)
       
-      // Load channel names from Firestore
+      // Load channel names and data from Firestore
       const channelNames = {}
+      const channelData = []
       snapshot.docs.forEach(doc => {
         const data = doc.data()
         channelNames[doc.id] = data.name || doc.id
+        channelData.push({
+          id: doc.id,
+          name: data.name || doc.id,
+          connectedAt: data.connectedAt?.toDate() || new Date(0) // Fallback to epoch if no timestamp
+        })
       })
       ytChannelNames.value = channelNames
+      ytChannelData.value = channelData
     } catch (e) {
       console.warn('Failed to load YouTube channels', e)
     }
   }
+
+/*
+  computed properties for sorting
+*/
+
+  const sortedPages = computed(() => {
+    return [...storeNotes.notes].sort((a, b) => {
+      // Sort by creation time (newest first)
+      const aTime = a.updatedAt?.toDate?.() || new Date(a.createdAt) || new Date(0)
+      const bTime = b.updatedAt?.toDate?.() || new Date(b.createdAt) || new Date(0)
+      return bTime - aTime
+    })
+  })
+
+  const sortedChannels = computed(() => {
+    return [...ytChannelData.value].sort((a, b) => {
+      // Sort by connection time (newest first)
+      return b.connectedAt - a.connectedAt
+    })
+  })
 
   onMounted(() => {
     loadYouTubeChannels()

@@ -70,7 +70,7 @@ router.beforeEach(async (to, from) => {
     return { name: 'auth' }
   }
   if (storeAuth.user.id && to.name === 'auth') {
-    return { name: 'notes' }
+    return { name: 'stats' }
   }
 })
 export default router
