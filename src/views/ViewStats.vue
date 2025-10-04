@@ -21,7 +21,7 @@
           <div class="page-info">
             <div class="page-name">{{ note.name || 'Untitled Page' }}</div>
             <div class="page-id">{{ note.id }}</div>
-            <div class="page-id">{{ note.updatedAt.toDate().toLocaleString() }}</div>
+            <div class="page-id">{{ note.updatedAt&& note.updatedAt.toDate().toLocaleString() }}</div>
           </div>
         </div>
       </div>
@@ -37,7 +37,7 @@
           <div class="channel-info">
             <div class="channel-name">{{ channel.name || channel.id }}</div>
             <div class="channel-id">{{ channel.id }}</div>
-            <div class="channel-id">{{ channel.connectedAt.toDate().toLocaleString() }}</div>
+            <div class="channel-id">{{ channel.connectedAt }}</div>
           </div>
         </div>
       </div>
