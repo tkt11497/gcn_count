@@ -163,7 +163,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStoreNotes } from '@/stores/storeNotes'
 import { getLiveVideoData, getPageInsights, getLiveVideoEngagement, fetchYouTubeLiveCounts, fetchYouTubeLiveCountsViaCloud } from '@/js/facebookAuth'
 import { db } from '@/js/firebase'
-import { doc, setDoc, serverTimestamp, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, getDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { useStoreAuth } from '@/stores/storeAuth'
 
 const storeNotes = useStoreNotes()
@@ -367,18 +367,16 @@ onMounted(() => {
   // Initial refresh after 2 seconds
   setTimeout(autoRefreshAllPages, 1000)
   // Load stored peak from Firestore
-  ;(async () => {
-    try {
-      const refDoc = doc(db, 'metrics', 'live_totals')
-      const snap = await getDoc(refDoc)
-      if (snap.exists()) {
-        const data = snap.data()
-        storedPeakViewers.value = Number(data?.totalPeakViewers) || 0
-      }
-    } catch (e) {
-      console.warn('Failed loading stored peak', e)
+  // Set up real-time listener for peak viewers
+  const refDoc = doc(db, 'metrics', 'live_totals')
+  onSnapshot(refDoc, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data()
+      storedPeakViewers.value = Number(data?.totalPeakViewers) || 0
     }
-  })()
+  }, (error) => {
+    console.warn('Failed loading stored peak', error)
+  })
   
   // Load YouTube channels and fetch counts
   loadYouTubeChannels().then(() => {
