@@ -45,7 +45,7 @@
         </div>
         
         <div class="countdown-number" :class="getCountdownClass()">
-          {{ currentNumber }}
+          {{ Math.max(0, currentNumber).toFixed(1) }}
         </div>
         <div class="target-zone" v-if="isActive">
           <!-- <span class="target-label">Target: 95-100</span> -->
@@ -57,7 +57,7 @@
         <div class="result-content" :class="getResultClass()">
           <h2 class="result-title">{{ resultTitle }}</h2>
           <p class="result-message">{{ resultMessage }}</p>
-          <div class="final-number">{{ stoppedAt }}</div>
+          <div class="final-number">{{ stoppedAt !== null ? stoppedAt.toFixed(1) : '0.0' }}</div>
         </div>
       </div>
 
@@ -111,21 +111,22 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 const START_NUMBER = 300
 const TARGET_MIN = 19
 const TARGET_MAX = 29
-const MIN_INTERVAL = 2// Fastest interval in ms
-const MAX_INTERVAL = 20 // Slowest interval in ms
 
 // Speed control parameters
-const SPEED_MULTIPLIER = 1.0 // Overall speed: >1.0 = faster (e.g., 2.0 = 2x faster), <1.0 = slower (e.g., 0.5 = 2x slower)
-const SPEED_CURVE = 3.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
-const MAX_SPEED_AT_PERCENT = 0.3 // Reach maximum speed at this percentage (0.45 = 45%)
+const MIN_SPEED = 0.1 // Minimum speed multiplier (slowest)
+const MAX_SPEED = 3.0 // Maximum speed multiplier (fastest)
+const SPEED_CURVE = 2.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
+const MAX_SPEED_AT_PERCENT = 0.95 // Reach maximum speed at this percentage (0.3 = 30%)
+const SPEED_DIVISOR = 10 // Divisor for speed calculation (lower = faster overall)
 
-const currentNumber = ref(START_NUMBER)
+const currentNumber = ref(START_NUMBER) // Can be decimal for smooth countdown
 const isActive = ref(false)
 const isStopped = ref(false)
 const stoppedAt = ref(null)
 const attempts = ref(0)
 const bestScore = ref(null)
-let countdownInterval = null
+let animationFrameId = null
+let lastUpdateTime = null
 
 const isInTargetZone = computed(() => {
   return isActive.value && currentNumber.value >= TARGET_MIN && currentNumber.value <= TARGET_MAX
@@ -179,9 +180,9 @@ const resultMessage = computed(() => {
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
     return 'You got it! Lord Slain with Retribution!'
   } else if (stoppedAt.value < TARGET_MIN) {
-    return `You stopped at ${stoppedAt.value}. Need to wait until 95!`
+    return `You stopped at ${stoppedAt.value.toFixed(1)}. Need to wait until ${TARGET_MIN}!`
   } else {
-    return `You stopped at ${stoppedAt.value}. You missed the window!`
+    return `You stopped at ${stoppedAt.value.toFixed(1)}. You missed the window!`
   }
 })
 
@@ -202,16 +203,16 @@ const getResultClass = () => {
   return 'result-fail'
 }
 
-const calculateInterval = (number) => {
+const calculateSpeed = (number) => {
   // Calculate progress from 0 to 1 (0% to 100%)
   const progress = (START_NUMBER - number) / START_NUMBER
   
-  let interval
+  let speed
   
-  // If we've reached the max speed point, use MIN_INTERVAL
+  // If we've reached the max speed point, use MAX_SPEED
   if (progress >= MAX_SPEED_AT_PERCENT) {
     console.log('max speed')
-    interval = MIN_INTERVAL
+    speed = MAX_SPEED
   } else {
     // Scale progress to 0-1 within the acceleration phase (0% to MAX_SPEED_AT_PERCENT%)
     const scaledProgress = progress / MAX_SPEED_AT_PERCENT
@@ -219,14 +220,11 @@ const calculateInterval = (number) => {
     // Apply exponential curve for more dramatic speed changes
     const curvedProgress = Math.pow(scaledProgress, SPEED_CURVE)
     
-    // Calculate interval with curve (from MAX_INTERVAL to MIN_INTERVAL)
-    interval = MAX_INTERVAL - (curvedProgress * (MAX_INTERVAL - MIN_INTERVAL))
+    // Calculate speed with curve (from MIN_SPEED to MAX_SPEED)
+    speed = MIN_SPEED + (curvedProgress * (MAX_SPEED - MIN_SPEED))
   }
   
-  // Apply speed multiplier: divide interval to make it faster (smaller interval = faster countdown)
-  // Math.max ensures minimum of 1ms (browsers clamp setTimeout to ~4ms anyway)
-  console.log(Math.max(1, interval / SPEED_MULTIPLIER))
-  return Math.max(1, interval / SPEED_MULTIPLIER)
+  return speed
 }
 
 const startGame = () => {
@@ -234,22 +232,35 @@ const startGame = () => {
   isStopped.value = false
   currentNumber.value = START_NUMBER
   stoppedAt.value = null
+  lastUpdateTime = performance.now()
   
-  const tick = () => {
+  const tick = (currentTime) => {
     if (!isActive.value) return
     
-    currentNumber.value--
+    if (!lastUpdateTime) lastUpdateTime = currentTime
+    const delta = currentTime - lastUpdateTime
+    
+    // Calculate current speed based on number position
+    const speed = calculateSpeed(currentNumber.value)
+    
+    // Decrease number continuously based on elapsed time and speed
+    currentNumber.value -= (delta * speed) / SPEED_DIVISOR
     
     if (currentNumber.value <= 0) {
+      currentNumber.value = 0
       stopGame()
       return
     }
     
-    const interval = calculateInterval(currentNumber.value)
-    countdownInterval = setTimeout(tick, interval)
+    lastUpdateTime = currentTime
+    
+    // Continue animation loop
+    if (isActive.value) {
+      animationFrameId = requestAnimationFrame(tick)
+    }
   }
   
-  tick()
+  animationFrameId = requestAnimationFrame(tick)
 }
 
 const stopGame = () => {
@@ -260,10 +271,12 @@ const stopGame = () => {
   stoppedAt.value = currentNumber.value
   attempts.value++
   
-  if (countdownInterval) {
-    clearTimeout(countdownInterval)
-    countdownInterval = null
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
   }
+  
+  lastUpdateTime = null
   
   // Update best score if in target zone
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
@@ -280,10 +293,12 @@ const resetGame = () => {
   currentNumber.value = START_NUMBER
   stoppedAt.value = null
   
-  if (countdownInterval) {
-    clearTimeout(countdownInterval)
-    countdownInterval = null
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
   }
+  
+  lastUpdateTime = null
 }
 
 // Keyboard support
@@ -306,8 +321,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyPress)
-  if (countdownInterval) {
-    clearTimeout(countdownInterval)
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
   }
 })
 </script>
