@@ -7,6 +7,7 @@ import gcn_register from '@/views/gcn_register.vue'
 import privacy_policy from '@/views/privacy_policy.vue'
 import home from '@/views/home.vue'
 import ViewYouTubeConnect from '@/views/ViewYouTubeConnect.vue'
+import ReactionTest from '@/views/ReactionTest.vue'
 import { useStoreAuth } from '@/stores/storeAuth'
 
 //const storeAuth = useStoreAuth()
@@ -55,6 +56,11 @@ const routes = [
     path: '/youtube-connect',
     name: 'youtube-connect',
     component: ViewYouTubeConnect
+  },
+  {
+    path: '/reaction-test',
+    name: 'reaction-test',
+    component: ReactionTest
   }
 ]
 
@@ -65,7 +71,7 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base', 'youtube-connect']
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base', 'youtube-connect', 'reaction-test']
   if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }

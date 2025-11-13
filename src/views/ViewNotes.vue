@@ -380,7 +380,7 @@ onMounted(() => {
   
   // Load YouTube channels and fetch counts
   loadYouTubeChannels().then(() => {
-    //refreshYouTubeCounts()
+    refreshYouTubeCounts()
   })
   
   // Set up interval for auto-refresh
