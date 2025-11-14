@@ -1,7 +1,18 @@
 <template>
   <div class="reaction-test-container">
-    <div class="hero-logo">
+    <div class="hero-logo" :class="{ 'logo-active': isActive || isStopped }">
       <img src="@/assets/image/msl_logo.png" alt="MSL Logo" class="msl-logo" />
+      <div class="logo-text-section" v-if="isActive || isStopped">
+        <div class="league-name">MLBB SUPER LEAGUE MYANMAR <span class="season-text">SEASON 2</span></div>
+        <div class="challenge-title">
+          <span class="title-white">RETRIBUTION</span>
+          <span class="title-red">CHALLENAGE</span>
+        </div>
+        <div class="title-divider" v-if="isActive || isStopped">
+          <div class="divider-line"></div>
+          <div class="divider-diamond"></div>
+        </div>
+      </div>
     </div>
 
     <div class="game-wrapper" :class="{ 'game-active': isActive, 'game-stopped': isStopped }">
@@ -18,13 +29,13 @@
       </div>
 
       <!-- Countdown Display -->
-      <div class="countdown-display-wrapper" v-if="isActive || isStopped">
+      <!-- <div class="countdown-display-wrapper" v-if="isActive || isStopped">
         <div class="countdown-display">
           <div class="countdown-number" :class="getCountdownClass()">
             {{ Math.max(0, currentNumber).toFixed(1) }}
           </div>
         </div>
-      </div>
+      </div> -->
 
 
       <!-- Progress Bar -->
@@ -45,12 +56,12 @@
             </div>
           </div>
           <!-- Progress Labels -->
-          <div class="progress-labels">
+          <!-- <div class="progress-labels">
               <span class="progress-label-end">0</span>
               <span class="progress-label-target">Target: {{ TARGET_MIN }}-{{ TARGET_MAX }}</span>
               <span class="progress-label-start">{{ START_NUMBER }}</span>
             
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -347,12 +358,100 @@ onUnmounted(() => {
 
 .hero-logo {
   margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  &.logo-active {
+    margin-bottom: 20px;
+
+    .msl-logo {
+      width: min(180px, 40vw);
+      margin-bottom: 0px;
+    }
+  }
 }
 
 .msl-logo {
   width: min(280px, 60vw);
   height: auto;
   filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.6));
+  transition: width 0.3s ease;
+}
+
+.logo-text-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.league-name {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  line-height: 1.4;
+
+  .season-text {
+    color: #ff4c4c;
+    font-weight: 700;
+    margin-left: 8px;
+  }
+}
+
+.challenge-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'Montserrat', 'Arial Black', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  line-height: 1.2;
+
+  .title-white {
+    color: #ffffff;
+  }
+
+  .title-red {
+    color: #ff4c4c;
+  }
+}
+
+.title-divider {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 15px;
+  margin-bottom: 10px;
+}
+
+.divider-line {
+  width: 100%;
+  max-width: 400px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+  position: relative;
+}
+
+.divider-diamond {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #ffffff;
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+  z-index: 2;
 }
 
 .game-wrapper {
@@ -391,7 +490,15 @@ onUnmounted(() => {
     animation: result-appear 0.5s ease-out;
   }
 }
-
+.game-active, .game-stopped {
+  background: none;
+  border: none;
+  box-shadow: none;
+  overflow: hidden;
+  &::before {
+    display: none;
+  }
+}
 @keyframes result-appear {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -513,7 +620,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   height: 100%;
-  background: darkgreen;
+  background: #fff;
   pointer-events: none;
   z-index: 1;
 }
@@ -526,11 +633,11 @@ onUnmounted(() => {
   transition: width 0.1s linear, background 0.3s ease;
   z-index: 2;
 
-  &.progress-slow { background: gray; }
-  &.progress-medium { background: gray; }
-  &.progress-fast { background: gray; }
+  &.progress-slow { background: #808080; }
+  &.progress-medium { background: #808080; }
+  &.progress-fast { background: #808080; }
   &.progress-in-target { background: #fff; box-shadow: 0 0 10px #fff; }
-  &.progress-past-target { background: gray; }
+  &.progress-past-target { background: #808080; }
 }
 
 .progress-labels {
@@ -652,8 +759,8 @@ onUnmounted(() => {
   img {
     width: auto;
     height: auto;
-    max-width: 200px;
-    max-height: 200px;
+    max-width: 140px;
+    max-height: 140px;
     display: block;
     object-fit: contain;
     border-radius: 0;
@@ -746,6 +853,22 @@ onUnmounted(() => {
   .final-number {
     font-size: 3.5rem;
   }
+  .league-name {
+    font-size: 0.75rem;
+  }
+  .challenge-title {
+    font-size: 1.4rem;
+  }
+  .hero-logo.logo-active .msl-logo {
+    width: min(140px, 35vw);
+  }
+  .divider-line {
+    max-width: 300px;
+  }
+  .divider-diamond {
+    width: 8px;
+    height: 8px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -773,6 +896,24 @@ onUnmounted(() => {
   .btn-stop {
     font-size: 1.2rem;
     padding: 18px 30px;
+  }
+  .league-name {
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+  }
+  .challenge-title {
+    font-size: 1.2rem;
+    letter-spacing: 1.5px;
+  }
+  .hero-logo.logo-active .msl-logo {
+    width: min(140px, 35vw);
+  }
+  .divider-line {
+    max-width: 250px;
+  }
+  .divider-diamond {
+    width: 7px;
+    height: 7px;
   }
 }
 </style>
