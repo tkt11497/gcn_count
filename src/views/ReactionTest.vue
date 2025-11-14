@@ -1,16 +1,20 @@
 <template>
   <div class="reaction-test-container">
+    <div class="hero-logo">
+      <img src="@/assets/image/msl_logo.png" alt="MSL Logo" class="msl-logo" />
+    </div>
+
     <div class="game-wrapper" :class="{ 'game-active': isActive, 'game-stopped': isStopped }">
       <!-- Game Title -->
       <div class="game-header" v-if="!isActive && !isStopped">
         <div class="header-logos">
-          <div class="logo-text">MOBILE LEGENDS</div>
-          <div class="logo-text">MSL-MM SEASON 2</div>
+          <div class="logo-text">MLBB Super League</div>
+          <div class="logo-text">SEASON 2</div>
         </div>
-        <div class="header-supertitle">❖ ❖ OFFICIAL ❖ ❖</div>
-        <h1 class="game-title">Reaction Partner</h1>
-        <p class="game-subtitle">Stop the countdown between {{ TARGET_MIN }}-{{ TARGET_MAX }}!</p>
-        <p class="game-instruction">The lower the number, the faster it goes!</p>
+        <div class="header-supertitle">♦ ♦ Retri Challenge ♦ ♦</div>
+        <h1 class="game-title"> သင် Retri<br />ဘယ်လောက်ကျွမ်းလဲ?</h1>
+        <p class="game-subtitle">သတ်မှတ်ထားသော HP အရောက်တွင်<br />Retri အရပေါက်ပြီး</p>
+        <p class="game-instruction">Diamonds လက်ဆောင်များ ရယူလိုက်ပါ</p>
       </div>
 
       <!-- Countdown Display -->
@@ -66,7 +70,7 @@
           @click="startGame" 
           class="btn-start"
         >
-          START GAME
+        စတင်မည်
         </button>
         
         <button 
@@ -75,7 +79,7 @@
           class="btn-stop"
           :class="{ 'btn-pulse': isInTargetZone }"
         >
-          STOP NOW!
+          <img src="@/assets/image/retri_skill.png" alt="Stop Now" />
         </button>
         
         <button 
@@ -330,27 +334,38 @@ onUnmounted(() => {
 .reaction-test-container {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: 
-    linear-gradient(to bottom, rgba(0,0,0,0.7), #0a0a0a),
-    url('https://www.transparenttextures.com/patterns/clean-textile.png'),
-    #d12229;
+  justify-content: flex-start;
+  background: url('@/assets/image/retri_background.png') no-repeat center center / cover;
   font-family: 'Montserrat', sans-serif;
-  padding: 20px;
+  padding: 3px 18px 20px 18px;
   color: #fff;
+  background-size: cover;
+  background-position: top center;
+}
+
+.hero-logo {
+  margin-bottom: 4px;
+}
+
+.msl-logo {
+  width: min(280px, 60vw);
+  height: auto;
+  filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.6));
 }
 
 .game-wrapper {
   position: relative;
   z-index: 1;
   text-align: center;
-  max-width: 600px;
+  max-width: 500px;
   width: 100%;
-  padding: 40px;
-  background: #111;
-  border-radius: 10px;
-  box-shadow: 0 0 40px rgba(0,0,0,0.9);
+  padding: 45px 35px;
+  background: rgba(8, 8, 8, 0.85);
+  border-radius: 18px;
+  border: 3px solid #e53935;
+  box-shadow: 0 25px 45px rgba(0, 0, 0, 0.8);
   overflow: hidden;
 
   &::before {
@@ -390,14 +405,14 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 28px;
 }
 
 .logo-text {
   font-family: 'Montserrat', sans-serif;
-  font-weight: 600;
-  color: #999;
-  font-size: 0.8rem;
+  font-weight: 500;
+  color: #d0d0d0;
+  font-size: 0.55rem;
   text-transform: uppercase;
   letter-spacing: 1.5px;
 }
@@ -405,26 +420,26 @@ onUnmounted(() => {
 .header-supertitle {
   display: block;
   font-size: 1rem;
-  color: #ff4141;
-  letter-spacing: 3px;
-  margin-bottom: 15px;
+  color: #ff4c4c;
+  letter-spacing: 4px;
+  margin-bottom: 25px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .game-title {
-  font-family: 'Arial Black', 'Impact', sans-serif;
-  font-size: 3rem;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1.5rem;
   font-weight: 900;
   color: #ffffff;
   margin: 0;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  transform: scaleY(0.9);
+  line-height: 1.75;
 }
 
 .game-subtitle {
-  font-size: 1.2rem;
+  font-size: 1rem;
   color: #ccc;
   margin-top: 10px;
   margin-bottom: 5px;
@@ -432,8 +447,8 @@ onUnmounted(() => {
 }
 
 .game-instruction {
-  font-size: 1rem;
-  color: #888;
+  font-size: 0.98rem;
+  color: #ccc;
   margin-bottom: 20px;
 }
 
@@ -488,9 +503,9 @@ onUnmounted(() => {
 .progress-bar-bg {
   position: relative;
   width: 100%;
-  height: 10px;
-  background: #222;
-  border-radius: 5px;
+  height: 40px;
+  background: green;
+  border-radius: 0px;
   overflow: hidden;
 }
 
@@ -498,7 +513,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   height: 100%;
-  background: rgba(255, 65, 65, 0.4);
+  background: darkgreen;
   pointer-events: none;
   z-index: 1;
 }
@@ -507,15 +522,15 @@ onUnmounted(() => {
   position: absolute;
   right: 0; top: 0;
   height: 100%;
-  border-radius: 5px;
+  border-radius: 0px;
   transition: width 0.1s linear, background 0.3s ease;
   z-index: 2;
 
-  &.progress-slow { background: #d12229; }
-  &.progress-medium { background: #e63946; }
-  &.progress-fast { background: #f75c5c; }
+  &.progress-slow { background: gray; }
+  &.progress-medium { background: gray; }
+  &.progress-fast { background: gray; }
   &.progress-in-target { background: #fff; box-shadow: 0 0 10px #fff; }
-  &.progress-past-target { background: #8d0801; }
+  &.progress-past-target { background: gray; }
 }
 
 .progress-labels {
@@ -589,14 +604,12 @@ onUnmounted(() => {
 }
 
 .btn-start,
-.btn-stop,
 .btn-reset {
   padding: 18px 40px;
   font-size: 1.3rem;
-  font-weight: 700;
-  border-width: 2px;
-  border-style: solid;
-  border-radius: 5px;
+  font-weight: 800;
+  border: none;
+  border-radius: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
   text-transform: uppercase;
@@ -606,10 +619,8 @@ onUnmounted(() => {
   min-width: 220px;
 
   &:hover {
-    background: #d12229;
-    border-color: #d12229;
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(209, 34, 41, 0.3);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   }
   &:active {
     transform: translateY(0) scale(0.98);
@@ -617,27 +628,60 @@ onUnmounted(() => {
 }
 
 .btn-start {
-  border-color: #d12229;
+  background: linear-gradient(180deg, #ff6b5f 0%, #e53935 100%);
+  box-shadow: 0 12px 25px rgba(229, 57, 53, 0.4);
+  font-size: 1.6rem;
+
+  &:hover {
+    background: linear-gradient(180deg, #ff7c70 0%, #f04844 100%);
+  }
 }
 
 .btn-stop {
-  border-color: #ff4141;
-  background: #d12229;
-  font-size: 1.6rem;
-  padding: 22px 50px;
+  width: auto;
+  height: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  display: inline-block;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: none;
+  cursor: pointer;
+
+  img {
+    width: auto;
+    height: auto;
+    max-width: 200px;
+    max-height: 200px;
+    display: block;
+    object-fit: contain;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  &:hover {
+    transform: translateY(-6px) scale(1.05);
+    box-shadow: 0 20px 35px rgba(0, 0, 0, 0.55);
+  }
+
+  &:active {
+    transform: translateY(-2px) scale(0.98);
+  }
 
   &.btn-pulse {
-    animation: pulse 1s infinite;
+    animation: pulse 1.2s infinite;
   }
 }
 
 .btn-reset {
-  border-color: #555;
+  border: 2px solid #555;
+  background: transparent;
   margin-top: 40px;
   &:hover {
-    background: #555;
-    border-color: #555;
-    box-shadow: 0 5px 15px rgba(100, 100, 100, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #777;
+    box-shadow: 0 5px 15px rgba(100, 100, 100, 0.3);
   }
 }
 
@@ -682,8 +726,12 @@ onUnmounted(() => {
     padding: 20px;
     border-radius: 10px;
   }
+  .reaction-test-container {
+    background-size: 100% 90%;
+    background-position: top center;
+  }
   .game-title {
-    font-size: 2rem;
+    font-size: 1.45rem;
   }
   .countdown-number {
     font-size: 5rem;
@@ -704,11 +752,15 @@ onUnmounted(() => {
   .game-wrapper {
     padding: 15px;
   }
+  .reaction-test-container {
+    background-size: 100% 100%;
+    background-position: center center;
+  }
   .game-title {
-    font-size: 1.5rem;
+    font-size: 1.45rem;
   }
   .game-subtitle {
-    font-size: 1rem;
+    font-size: 0.98rem;
   }
   .countdown-number {
     font-size: 4rem;
