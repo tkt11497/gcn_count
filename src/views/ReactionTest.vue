@@ -8,10 +8,10 @@
           <span class="title-white">RETRIBUTION</span>
           <span class="title-red">CHALLENAGE</span>
         </div>
-        <div class="title-divider" v-if="isActive || isStopped">
+        <!-- <div class="title-divider" v-if="isActive || isStopped">
           <div class="divider-line"></div>
           <div class="divider-diamond"></div>
-        </div>
+        </div> -->
       </div>
     </div>
 
@@ -28,15 +28,19 @@
         <p class="game-instruction">Diamonds လက်ဆောင်များ ရယူလိုက်ပါ</p>
       </div>
 
-      <!-- Countdown Display -->
-      <!-- <div class="countdown-display-wrapper" v-if="isActive || isStopped">
-        <div class="countdown-display">
-          <div class="countdown-number" :class="getCountdownClass()">
-            {{ Math.max(0, currentNumber).toFixed(1) }}
-          </div>
+      <!-- Lord Video -->
+      <div class="lord-video-container" v-if="isActive || isStopped">
+        <div class="lord-video-frame">
+          <video 
+            src="@/assets/image/lord_video.mp4" 
+            autoplay 
+            loop 
+            muted 
+            playsinline
+            class="lord-video"
+          ></video>
         </div>
-      </div> -->
-
+      </div>
 
       <!-- Progress Bar -->
       <div class="progress-bar-container" v-if="isActive || isStopped">
@@ -67,10 +71,23 @@
 
       <!-- Result Display -->
       <div class="result-display" v-if="isStopped">
-        <div class="result-content" :class="getResultClass()">
-          <h2 class="result-title">{{ resultTitle }}</h2>
-          <p class="result-message">{{ resultMessage }}</p>
-          <div class="final-number">{{ stoppedAt !== null ? stoppedAt.toFixed(1) : '0.0' }}</div>
+        <div class="result-content">
+          <div class="result-title-section">
+            <div class="result-title-en" v-if="resultTitle === 'Enemy Steal the Lord'">
+              <div class="title-line-1">Enemy Steal</div>
+              <div class="title-line-2">The Lord</div>
+            </div>
+            <div class="result-title-en" v-else>
+              <div class="title-line-1">{{ resultTitle }}</div>
+            </div>
+          </div>
+          <div class="result-divider">
+            <div class="result-divider-line"></div>
+            <div class="result-divider-diamond"></div>
+          </div>
+          <div class="result-message-section">
+            <div class="result-message-text">{{ resultMessage }}</div>
+          </div>
         </div>
       </div>
 
@@ -103,7 +120,7 @@
       </div>
 
       <!-- Stats -->
-      <div class="game-stats" v-if="isStopped">
+      <!-- <div class="game-stats" v-if="isStopped">
         <div class="stat-item">
           <span class="stat-label">Best Score:</span>
           <span class="stat-value">{{ bestScore || 'N/A' }}</span>
@@ -112,7 +129,7 @@
           <span class="stat-label">Attempts:</span>
           <span class="stat-value">{{ attempts }}</span>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
@@ -175,14 +192,14 @@ const getProgressBarClass = () => {
 }
 
 const resultTitle = computed(() => {
-  if (!stoppedAt.value) return 'MISSION FAILED'
+  if (!stoppedAt.value) return 'Enemy Steal the Lord'
   
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
-    return 'TARGET NEUTRALIZED'
+    return 'You\'ve slained the Lord'
   } else if (stoppedAt.value < TARGET_MIN) {
-    return 'TOO LATE'
+    return 'Enemy Steal the Lord'
   } else {
-    return 'TOO EARLY'
+    return 'Enemy Steal the Lord'
   }
 })
 
@@ -190,11 +207,11 @@ const resultMessage = computed(() => {
   if (!stoppedAt.value) return ''
   
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
-    return 'Mission accomplished. Perfect timing!'
+    return 'Retri ပေါက်ရာတွင် ဆရာကျ၍ Lord ရသွားပါပြီ'
   } else if (stoppedAt.value < TARGET_MIN) {
-    return `Target escaped. The window was ${TARGET_MIN}-${TARGET_MAX}.`
+    return `Retri နောက်ကျ၍ Enemy မှ Lord ရသွားပါပြီ`
   } else {
-    return `Trigger pulled too soon. The window was ${TARGET_MIN}-${TARGET_MAX}.`
+    return `Retri စောပြီးပေါက်မိ၍ Enemy မှ Lord ရသွားပါပြီ`
   }
 })
 
@@ -294,7 +311,7 @@ const stopGame = () => {
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
     const score = stoppedAt.value
     if (!bestScore.value || score > bestScore.value) {
-      bestScore.value = score
+      bestScore.value = Math.round(score)
     }
   }
 }
@@ -559,6 +576,32 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
+.lord-video-container {
+  width: 100%;
+  max-width: 500px;
+  margin: 25px auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.lord-video-frame {
+  width: 100%;
+  max-width: 450px;
+  border: 2px solid #ffffff;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+  background: #000;
+}
+
+.lord-video {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
 .countdown-display-wrapper {
   margin: 40px 0;
   display: flex;
@@ -657,53 +700,91 @@ onUnmounted(() => {
 .result-display {
   margin: 40px 0;
   animation: result-appear 0.5s ease-out;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .result-content {
-  padding: 30px;
-  border-radius: 8px;
-  background: rgba(0,0,0,0.3);
-  border: 2px solid;
-
-  &.result-success {
-    border-color: #ff4141;
-    background: rgba(209, 34, 41, 0.1);
-  }
-  &.result-fail {
-    border-color: #888;
-    background: rgba(136, 136, 136, 0.1);
-  }
+  padding: 0;
+  background: transparent;
+  border: none;
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 
-.result-title {
-  font-size: 2.5rem;
+.result-title-section {
+  width: 100%;
+  text-align: center;
+}
+
+.result-title-en {
+  font-family: 'Montserrat', 'Arial Black', sans-serif;
   font-weight: 900;
-  margin-bottom: 15px;
   text-transform: uppercase;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
+  line-height: 1.2;
+  color: #ff4c4c;
+  text-shadow: 
+    2px 2px 0px rgba(0, 0, 0, 0.8),
+    0px 0px 20px rgba(255, 76, 76, 0.6),
+    0px 0px 40px rgba(255, 76, 76, 0.4);
+  font-size: 2.5rem;
 }
 
-.result-content.result-success .result-title {
-  color: #ff4141;
-  text-shadow: 0 0 10px rgba(255, 65, 65, 0.5);
+.title-line-1 {
+  margin-bottom: 5px;
 }
 
-.result-content.result-fail .result-title {
-  color: #aaa;
+.title-line-2 {
+  font-size: 2.5rem;
 }
 
-.result-message {
-  font-size: 1.2rem;
-  color: #fff;
-  margin-bottom: 20px;
+.result-divider {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px 0;
 }
 
-.final-number {
-  font-size: 5rem;
-  font-weight: 900;
-  color: #fff;
-  font-family: 'Orbitron', 'Arial Black', sans-serif;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+.result-divider-line {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+  position: relative;
+}
+
+.result-divider-diamond {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #ffffff;
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+  z-index: 2;
+}
+
+.result-message-section {
+  width: 100%;
+  text-align: center;
+}
+
+.result-message-text {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.6;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  letter-spacing: 1px;
 }
 
 .game-controls {
@@ -847,11 +928,21 @@ onUnmounted(() => {
     min-width: auto;
     padding: 20px;
   }
-  .result-title {
-    font-size: 2rem;
+  .result-title-en {
+    font-size: 1.8rem;
   }
-  .final-number {
-    font-size: 3.5rem;
+  .title-line-2 {
+    font-size: 1.8rem;
+  }
+  .result-message-text {
+    font-size: 1.1rem;
+  }
+  .result-divider {
+    max-width: 300px;
+  }
+  .result-divider-diamond {
+    width: 8px;
+    height: 8px;
   }
   .league-name {
     font-size: 0.75rem;
@@ -868,6 +959,12 @@ onUnmounted(() => {
   .divider-diamond {
     width: 8px;
     height: 8px;
+  }
+  .lord-video-container {
+    margin: 20px auto;
+  }
+  .lord-video-frame {
+    max-width: 100%;
   }
 }
 
@@ -912,6 +1009,31 @@ onUnmounted(() => {
     max-width: 250px;
   }
   .divider-diamond {
+    width: 7px;
+    height: 7px;
+  }
+  .lord-video-container {
+    margin: 15px auto;
+  }
+  .lord-video-frame {
+    max-width: 100%;
+    border-width: 1.5px;
+  }
+  .result-title-en {
+    font-size: 1.5rem;
+    letter-spacing: 2px;
+  }
+  .title-line-2 {
+    font-size: 1.5rem;
+  }
+  .result-message-text {
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+  }
+  .result-divider {
+    max-width: 250px;
+  }
+  .result-divider-diamond {
     width: 7px;
     height: 7px;
   }
