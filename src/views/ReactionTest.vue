@@ -3,52 +3,50 @@
     <div class="game-wrapper" :class="{ 'game-active': isActive, 'game-stopped': isStopped }">
       <!-- Game Title -->
       <div class="game-header" v-if="!isActive && !isStopped">
-        <h1 class="game-title">⚔️ Reaction Test ⚔️</h1>
-        <p class="game-subtitle">Stop the countdown between 95-100!</p>
+        <div class="header-logos">
+          <div class="logo-text">MOBILE LEGENDS</div>
+          <div class="logo-text">MSL-MM SEASON 2</div>
+        </div>
+        <div class="header-supertitle">❖ ❖ OFFICIAL ❖ ❖</div>
+        <h1 class="game-title">Reaction Partner</h1>
+        <p class="game-subtitle">Stop the countdown between {{ TARGET_MIN }}-{{ TARGET_MAX }}!</p>
         <p class="game-instruction">The lower the number, the faster it goes!</p>
       </div>
 
       <!-- Countdown Display -->
-      <div class="countdown-display" v-if="isActive || isStopped">
-        <!-- Progress Bar -->
-        <div class="progress-bar-container" v-if="isActive || isStopped">
-          <div class="progress-bar-wrapper">
-            <div class="progress-bar-bg">
-              <!-- Target Zone Indicator -->
-              <div 
-                class="target-zone-indicator" 
-                :style="{ right: targetZoneStart + '%', width: targetZoneWidth + '%' }"
-              ></div>
-              <!-- Progress Fill -->
-              <div 
-                class="progress-bar-fill" 
-                :class="getProgressBarClass()"
-                :style="{ width: progressPercentage + '%' }"
-              >
-                <div class="progress-bar-glow"></div>
-              </div>
-              <!-- Current Position Marker -->
-              <div 
-                class="progress-marker" 
-                v-if="isActive"
-                :style="{ right: progressPercentage + '%' }"
-              ></div>
-            </div>
-            <!-- Progress Labels -->
-            <div class="progress-labels">
-                <span class="progress-label-end">0</span>
-                <span class="progress-label-target">Target: {{ TARGET_MIN }}-{{ TARGET_MAX }}</span>
-                <span class="progress-label-start">{{ START_NUMBER }}</span>
-              
-            </div>
+      <div class="countdown-display-wrapper" v-if="isActive || isStopped">
+        <div class="countdown-display">
+          <div class="countdown-number" :class="getCountdownClass()">
+            {{ Math.max(0, currentNumber).toFixed(1) }}
           </div>
         </div>
-        
-        <div class="countdown-number" :class="getCountdownClass()">
-          {{ Math.max(0, currentNumber).toFixed(1) }}
-        </div>
-        <div class="target-zone" v-if="isActive">
-          <!-- <span class="target-label">Target: 95-100</span> -->
+      </div>
+
+
+      <!-- Progress Bar -->
+      <div class="progress-bar-container" v-if="isActive || isStopped">
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar-bg">
+            <!-- Target Zone Indicator -->
+            <div 
+              class="target-zone-indicator" 
+              :style="{ right: targetZoneStart + '%', width: targetZoneWidth + '%' }"
+            ></div>
+            <!-- Progress Fill -->
+            <div 
+              class="progress-bar-fill" 
+              :class="getProgressBarClass()"
+              :style="{ width: progressPercentage + '%' }"
+            >
+            </div>
+          </div>
+          <!-- Progress Labels -->
+          <div class="progress-labels">
+              <span class="progress-label-end">0</span>
+              <span class="progress-label-target">Target: {{ TARGET_MIN }}-{{ TARGET_MAX }}</span>
+              <span class="progress-label-start">{{ START_NUMBER }}</span>
+            
+          </div>
         </div>
       </div>
 
@@ -68,7 +66,7 @@
           @click="startGame" 
           class="btn-start"
         >
-          🎮 START GAME
+          START GAME
         </button>
         
         <button 
@@ -77,16 +75,15 @@
           class="btn-stop"
           :class="{ 'btn-pulse': isInTargetZone }"
         >
-          ⚡ STOP NOW! ⚡
+          STOP NOW!
         </button>
         
         <button 
           v-if="isStopped" 
           @click="resetGame" 
-          style="margin-top: 60px;"
           class="btn-reset"
         >
-          🔄 PLAY AGAIN
+          PLAY AGAIN
         </button>
       </div>
 
@@ -163,14 +160,14 @@ const getProgressBarClass = () => {
 }
 
 const resultTitle = computed(() => {
-  if (!stoppedAt.value) return 'You Did Not Click!'
+  if (!stoppedAt.value) return 'MISSION FAILED'
   
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
-    return '🎉 Perfect! 🎉'
+    return 'TARGET NEUTRALIZED'
   } else if (stoppedAt.value < TARGET_MIN) {
-    return '❌ TOO Late!'
+    return 'TOO LATE'
   } else {
-    return '❌ TOO Early!'
+    return 'TOO EARLY'
   }
 })
 
@@ -178,11 +175,11 @@ const resultMessage = computed(() => {
   if (!stoppedAt.value) return ''
   
   if (stoppedAt.value >= TARGET_MIN && stoppedAt.value <= TARGET_MAX) {
-    return 'You got it! Lord Slain with Retribution!'
+    return 'Mission accomplished. Perfect timing!'
   } else if (stoppedAt.value < TARGET_MIN) {
-    return `You stopped at ${stoppedAt.value.toFixed(1)}. Need to wait until ${TARGET_MIN}!`
+    return `Target escaped. The window was ${TARGET_MIN}-${TARGET_MAX}.`
   } else {
-    return `You stopped at ${stoppedAt.value.toFixed(1)}. You missed the window!`
+    return `Trigger pulled too soon. The window was ${TARGET_MIN}-${TARGET_MAX}.`
   }
 })
 
@@ -328,28 +325,20 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;900&family=Orbitron:wght@700;900&display=swap');
+
 .reaction-test-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: 
+    linear-gradient(to bottom, rgba(0,0,0,0.7), #0a0a0a),
+    url('https://www.transparenttextures.com/patterns/clean-textile.png'),
+    #d12229;
+  font-family: 'Montserrat', sans-serif;
   padding: 20px;
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-      radial-gradient(circle at 20% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 80% 50%, rgba(255, 69, 0, 0.1) 0%, transparent 50%);
-    pointer-events: none;
-  }
+  color: #fff;
 }
 
 .game-wrapper {
@@ -359,20 +348,28 @@ onUnmounted(() => {
   max-width: 600px;
   width: 100%;
   padding: 40px;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 30px;
-  border: 2px solid rgba(255, 215, 0, 0.3);
-  backdrop-filter: blur(10px);
-  box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    inset 0 0 60px rgba(255, 215, 0, 0.1);
+  background: #111;
+  border-radius: 10px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.9);
+  overflow: hidden;
 
-  &.game-active {
-    border-color: rgba(255, 69, 0, 0.6);
-    box-shadow: 
-      0 20px 60px rgba(255, 69, 0, 0.3),
-      inset 0 0 60px rgba(255, 69, 0, 0.2);
-    animation: pulse-border 1s ease-in-out infinite;
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 2px,
+      transparent 2px,
+      transparent 12px
+    );
+    z-index: 0;
+  }
+
+  & > * {
+    position: relative;
+    z-index: 1;
   }
 
   &.game-stopped {
@@ -380,249 +377,145 @@ onUnmounted(() => {
   }
 }
 
-@keyframes pulse-border {
-  0%, 100% {
-    border-color: rgba(255, 69, 0, 0.6);
-    box-shadow: 
-      0 20px 60px rgba(255, 69, 0, 0.3),
-      inset 0 0 60px rgba(255, 69, 0, 0.2);
-  }
-  50% {
-    border-color: rgba(255, 215, 0, 0.8);
-    box-shadow: 
-      0 20px 60px rgba(255, 215, 0, 0.4),
-      inset 0 0 60px rgba(255, 215, 0, 0.3);
-  }
-}
-
 @keyframes result-appear {
-  from {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 .game-header {
   margin-bottom: 40px;
 }
 
-.game-title {
-  font-size: 3rem;
-  font-weight: 900;
-  color: #ffd700;
-  text-shadow: 
-    0 0 20px rgba(255, 215, 0, 0.8),
-    0 0 40px rgba(255, 215, 0, 0.4),
-    0 4px 8px rgba(0, 0, 0, 0.5);
-  margin-bottom: 10px;
-  letter-spacing: 2px;
-  animation: title-glow 2s ease-in-out infinite;
+.header-logos {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
 }
 
-@keyframes title-glow {
-  0%, 100% {
-    text-shadow: 
-      0 0 20px rgba(255, 215, 0, 0.8),
-      0 0 40px rgba(255, 215, 0, 0.4),
-      0 4px 8px rgba(0, 0, 0, 0.5);
-  }
-  50% {
-    text-shadow: 
-      0 0 30px rgba(255, 215, 0, 1),
-      0 0 60px rgba(255, 215, 0, 0.6),
-      0 4px 8px rgba(0, 0, 0, 0.5);
-  }
+.logo-text {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
+  color: #999;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.header-supertitle {
+  display: block;
+  font-size: 1rem;
+  color: #ff4141;
+  letter-spacing: 3px;
+  margin-bottom: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.game-title {
+  font-family: 'Arial Black', 'Impact', sans-serif;
+  font-size: 3rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  transform: scaleY(0.9);
 }
 
 .game-subtitle {
-  font-size: 1.5rem;
-  color: #fff;
-  margin-bottom: 10px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  font-size: 1.2rem;
+  color: #ccc;
+  margin-top: 10px;
+  margin-bottom: 5px;
+  font-weight: 500;
 }
 
 .game-instruction {
   font-size: 1rem;
-  color: #ccc;
+  color: #888;
   margin-bottom: 20px;
 }
 
-.countdown-display {
+.countdown-display-wrapper {
   margin: 40px 0;
-  min-height: 200px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 30px;
+}
+
+.countdown-display {
+  border: 2px solid #555;
+  border-radius: 8px;
+  padding: 30px 40px;
+  background: rgba(0,0,0,0.3);
+  position: relative;
+  min-width: 350px;
+
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    width: 25px;
+    height: 25px;
+    border-color: #ff4141;
+    border-style: solid;
+  }
+  &::before { top: -2px; left: -2px; border-width: 4px 0 0 4px; }
+  &::after { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; }
+}
+
+
+.countdown-number {
+  font-size: 7rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  transition: all 0.1s ease-out;
+  font-family: 'Orbitron', 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+  text-shadow: 0 0 15px rgba(255, 65, 65, 0.5);
+
+  &.countdown-slow { color: #ff4141; }
+  &.countdown-medium { color: #ff6363; }
+  &.countdown-fast { color: #ff8181; }
 }
 
 .progress-bar-container {
   width: 100%;
   max-width: 500px;
-  margin-bottom: 20px;
-}
-
-.progress-bar-wrapper {
-  position: relative;
+  margin: 0 auto 40px;
 }
 
 .progress-bar-bg {
   position: relative;
   width: 100%;
-  height: 30px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-radius: 15px;
+  height: 10px;
+  background: #222;
+  border-radius: 5px;
   overflow: hidden;
-  box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.5),
-    0 0 10px rgba(0, 0, 0, 0.3);
 }
 
 .target-zone-indicator {
   position: absolute;
   top: 0;
   height: 100%;
-  background: rgba(255, 215, 0, 0.2);
-  border-left: 2px solid rgba(255, 215, 0, 0.6);
-  border-right: 2px solid rgba(255, 215, 0, 0.6);
+  background: rgba(255, 65, 65, 0.4);
   pointer-events: none;
   z-index: 1;
-  animation: target-zone-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes target-zone-pulse {
-  0%, 100% {
-    background: rgba(255, 215, 0, 0.2);
-    border-color: rgba(255, 215, 0, 0.6);
-  }
-  50% {
-    background: rgba(255, 215, 0, 0.4);
-    border-color: rgba(255, 215, 0, 0.9);
-  }
 }
 
 .progress-bar-fill {
   position: absolute;
-  right: 0;
-  top: 0;
+  right: 0; top: 0;
   height: 100%;
-  background: linear-gradient(270deg, #4a9eff 0%, #5cb3ff 50%, #6dc5ff 100%);
-  border-radius: 12px;
+  border-radius: 5px;
   transition: width 0.1s linear, background 0.3s ease;
-  box-shadow: 
-    inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-    0 0 10px rgba(74, 158, 255, 0.5);
   z-index: 2;
-  overflow: hidden;
 
-  &.progress-slow {
-    background: linear-gradient(270deg, #4a9eff 0%, #5cb3ff 50%, #6dc5ff 100%);
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-      0 0 10px rgba(74, 158, 255, 0.5);
-  }
-
-  &.progress-medium {
-    background: linear-gradient(270deg, #ffa500 0%, #ffb733 50%, #ffc966 100%);
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-      0 0 15px rgba(255, 165, 0, 0.6);
-  }
-
-  &.progress-fast {
-    background: linear-gradient(270deg, #ff4500 0%, #ff6347 50%, #ff7f6e 100%);
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-      0 0 20px rgba(255, 69, 0, 0.7);
-    animation: progress-fast-pulse 0.3s ease-in-out infinite;
-  }
-
-  &.progress-in-target {
-    background: linear-gradient(270deg, #00ff00 0%, #32ff32 50%, #66ff66 100%);
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.4),
-      0 0 25px rgba(0, 255, 0, 0.8);
-    animation: progress-target-glow 0.5s ease-in-out infinite;
-  }
-
-  &.progress-past-target {
-    background: linear-gradient(270deg, #ff0000 0%, #ff3333 50%, #ff6666 100%);
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-      0 0 20px rgba(255, 0, 0, 0.7);
-  }
-}
-
-@keyframes progress-fast-pulse {
-  0%, 100% {
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.3),
-      0 0 20px rgba(255, 69, 0, 0.7);
-  }
-  50% {
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.4),
-      0 0 30px rgba(255, 69, 0, 0.9);
-  }
-}
-
-@keyframes progress-target-glow {
-  0%, 100% {
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.4),
-      0 0 25px rgba(0, 255, 0, 0.8);
-  }
-  50% {
-    box-shadow: 
-      inset 0 -2px 4px rgba(255, 255, 255, 0.5),
-      0 0 35px rgba(0, 255, 0, 1);
-  }
-}
-
-.progress-bar-glow {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 20px;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%);
-  pointer-events: none;
-}
-
-.progress-marker {
-  position: absolute;
-  top: -5px;
-  width: 4px;
-  height: 40px;
-  background: #fff;
-  border-radius: 2px;
-  box-shadow: 
-    0 0 10px rgba(255, 255, 255, 0.8),
-    0 0 20px rgba(255, 255, 255, 0.5);
-  transform: translateX(50%);
-  z-index: 3;
-  animation: marker-pulse 0.5s ease-in-out infinite;
-}
-
-@keyframes marker-pulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 
-      0 0 10px rgba(255, 255, 255, 0.8),
-      0 0 20px rgba(255, 255, 255, 0.5);
-  }
-  50% {
-    opacity: 0.7;
-    box-shadow: 
-      0 0 15px rgba(255, 255, 255, 1),
-      0 0 30px rgba(255, 255, 255, 0.7);
-  }
+  &.progress-slow { background: #d12229; }
+  &.progress-medium { background: #e63946; }
+  &.progress-fast { background: #f75c5c; }
+  &.progress-in-target { background: #fff; box-shadow: 0 0 10px #fff; }
+  &.progress-past-target { background: #8d0801; }
 }
 
 .progress-labels {
@@ -630,101 +523,13 @@ onUnmounted(() => {
   justify-content: space-between;
   margin-top: 8px;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: #aaa;
   font-weight: 600;
 }
 
-.progress-label-start,
-.progress-label-end {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
 .progress-label-target {
-  color: #ffd700;
+  color: #ff4141;
   font-weight: bold;
-  text-shadow: 
-    0 0 10px rgba(255, 215, 0, 0.8),
-    0 1px 2px rgba(0, 0, 0, 0.5);
-  animation: target-label-glow 2s ease-in-out infinite;
-}
-
-@keyframes target-label-glow {
-  0%, 100% {
-    text-shadow: 
-      0 0 10px rgba(255, 215, 0, 0.8),
-      0 1px 2px rgba(0, 0, 0, 0.5);
-  }
-  50% {
-    text-shadow: 
-      0 0 15px rgba(255, 215, 0, 1),
-      0 1px 2px rgba(0, 0, 0, 0.5);
-  }
-}
-
-.countdown-number {
-  font-size: 8rem;
-  font-weight: 900;
-  color: #fff;
-  text-shadow: 
-    0 0 30px rgba(255, 255, 255, 0.8),
-    0 0 60px rgba(255, 255, 255, 0.4),
-    0 4px 8px rgba(0, 0, 0, 0.5);
-  line-height: 1;
-  margin-bottom: 20px;
-  transition: all 0.1s ease-out;
-  font-family: 'Arial Black', sans-serif;
-  letter-spacing: 4px;
-
-  &.countdown-slow {
-    color: #4a9eff;
-    text-shadow: 
-      0 0 30px rgba(74, 158, 255, 0.8),
-      0 0 60px rgba(74, 158, 255, 0.4);
-  }
-
-  &.countdown-medium {
-    color: #ffa500;
-    text-shadow: 
-      0 0 30px rgba(255, 165, 0, 0.8),
-      0 0 60px rgba(255, 165, 0, 0.4);
-    animation: shake-medium 0.3s ease-in-out infinite;
-  }
-
-  &.countdown-fast {
-    color: #ff4500;
-    text-shadow: 
-      0 0 30px rgba(255, 69, 0, 0.8),
-      0 0 60px rgba(255, 69, 0, 0.4);
-    animation: shake-fast 0.15s ease-in-out infinite;
-  }
-}
-
-@keyframes shake-medium {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-2px); }
-  75% { transform: translateX(2px); }
-}
-
-@keyframes shake-fast {
-  0%, 100% { transform: translateX(0) scale(1); }
-  25% { transform: translateX(-3px) scale(1.02); }
-  75% { transform: translateX(3px) scale(1.02); }
-}
-
-.target-zone {
-  margin-top: 20px;
-}
-
-.target-label {
-  display: inline-block;
-  padding: 10px 20px;
-  background: rgba(255, 215, 0, 0.2);
-  border: 2px solid rgba(255, 215, 0, 0.5);
-  border-radius: 20px;
-  color: #ffd700;
-  font-size: 1.2rem;
-  font-weight: bold;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .result-display {
@@ -734,24 +539,17 @@ onUnmounted(() => {
 
 .result-content {
   padding: 30px;
-  border-radius: 20px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 3px solid;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  border: 2px solid;
 
   &.result-success {
-    border-color: #00ff00;
-    background: rgba(0, 255, 0, 0.1);
-    box-shadow: 
-      0 0 30px rgba(0, 255, 0, 0.5),
-      inset 0 0 30px rgba(0, 255, 0, 0.1);
+    border-color: #ff4141;
+    background: rgba(209, 34, 41, 0.1);
   }
-
   &.result-fail {
-    border-color: #ff4500;
-    background: rgba(255, 69, 0, 0.1);
-    box-shadow: 
-      0 0 30px rgba(255, 69, 0, 0.5),
-      inset 0 0 30px rgba(255, 69, 0, 0.1);
+    border-color: #888;
+    background: rgba(136, 136, 136, 0.1);
   }
 }
 
@@ -759,175 +557,104 @@ onUnmounted(() => {
   font-size: 2.5rem;
   font-weight: 900;
   margin-bottom: 15px;
-  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
 .result-content.result-success .result-title {
-  color: #00ff00;
-  animation: success-pulse 1s ease-in-out infinite;
+  color: #ff4141;
+  text-shadow: 0 0 10px rgba(255, 65, 65, 0.5);
 }
 
 .result-content.result-fail .result-title {
-  color: #ff4500;
-}
-
-@keyframes success-pulse {
-  0%, 100% {
-    transform: scale(1);
-    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-  }
-  50% {
-    transform: scale(1.05);
-    text-shadow: 
-      0 4px 8px rgba(0, 0, 0, 0.5),
-      0 0 20px rgba(0, 255, 0, 0.8);
-  }
+  color: #aaa;
 }
 
 .result-message {
   font-size: 1.2rem;
   color: #fff;
   margin-bottom: 20px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .final-number {
   font-size: 5rem;
   font-weight: 900;
   color: #fff;
-  text-shadow: 
-    0 0 30px rgba(255, 255, 255, 0.8),
-    0 4px 8px rgba(0, 0, 0, 0.5);
-  font-family: 'Arial Black', sans-serif;
+  font-family: 'Orbitron', 'Arial Black', sans-serif;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .game-controls {
-  margin: 40px 0;
+  margin: 40px 0 0;
 }
 
 .btn-start,
 .btn-stop,
 .btn-reset {
-  padding: 20px 50px;
-  font-size: 1.5rem;
-  font-weight: 900;
-  border: none;
-  border-radius: 50px;
+  padding: 18px 40px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 5px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  box-shadow: 
-    0 10px 30px rgba(0, 0, 0, 0.5),
-    inset 0 0 20px rgba(255, 255, 255, 0.1);
-  position: relative;
-  overflow: hidden;
+  letter-spacing: 3px;
+  color: #fff;
+  background: transparent;
+  min-width: 220px;
 
+  &:hover {
+    background: #d12229;
+    border-color: #d12229;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(209, 34, 41, 0.3);
+  }
   &:active {
-    transform: scale(0.95);
-  }
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
-  }
-
-  &:active::before {
-    width: 300px;
-    height: 300px;
+    transform: translateY(0) scale(0.98);
   }
 }
 
 .btn-start {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-
-  &:hover {
-    transform: translateY(-3px);
-    box-shadow: 
-      0 15px 40px rgba(102, 126, 234, 0.4),
-      inset 0 0 20px rgba(255, 255, 255, 0.2);
-  }
+  border-color: #d12229;
 }
 
 .btn-stop {
-  background: linear-gradient(135deg, #ff4500 0%, #ff6347 100%);
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  font-size: 2rem;
-  padding: 25px 60px;
-  animation: stop-button-pulse 1s ease-in-out infinite;
-
-  &:hover {
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 
-      0 20px 50px rgba(255, 69, 0, 0.6),
-      inset 0 0 30px rgba(255, 255, 255, 0.3);
-  }
+  border-color: #ff4141;
+  background: #d12229;
+  font-size: 1.6rem;
+  padding: 22px 50px;
 
   &.btn-pulse {
-    animation: stop-button-pulse-fast 0.5s ease-in-out infinite;
-    background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
-    box-shadow: 
-      0 20px 50px rgba(255, 215, 0, 0.6),
-      inset 0 0 30px rgba(255, 255, 255, 0.3);
-  }
-}
-
-@keyframes stop-button-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-@keyframes stop-button-pulse-fast {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 
-      0 20px 50px rgba(255, 215, 0, 0.6),
-      inset 0 0 30px rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    transform: scale(1.1);
-    box-shadow: 
-      0 25px 60px rgba(255, 215, 0, 0.8),
-      inset 0 0 40px rgba(255, 255, 255, 0.4);
+    animation: pulse 1s infinite;
   }
 }
 
 .btn-reset {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-
+  border-color: #555;
+  margin-top: 40px;
   &:hover {
-    transform: translateY(-3px);
-    box-shadow: 
-      0 15px 40px rgba(17, 153, 142, 0.4),
-      inset 0 0 20px rgba(255, 255, 255, 0.2);
+    background: #555;
+    border-color: #555;
+    box-shadow: 0 5px 15px rgba(100, 100, 100, 0.2);
   }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 65, 65, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 10px 20px rgba(255, 65, 65, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 65, 65, 0); }
 }
 
 .game-stats {
   display: flex;
   justify-content: space-around;
-  margin-top: 30px;
+  margin-top: 40px;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border-radius: 8px;
+  border: 1px solid #444;
 }
 
 .stat-item {
@@ -938,94 +665,62 @@ onUnmounted(() => {
 
 .stat-label {
   font-size: 0.9rem;
-  color: #aaa;
+  color: #888;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
 .stat-value {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #ffd700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
 }
 
 // Mobile responsiveness
 @media (max-width: 768px) {
   .game-wrapper {
     padding: 20px;
-    border-radius: 20px;
+    border-radius: 10px;
   }
-
   .game-title {
     font-size: 2rem;
   }
-
   .countdown-number {
     font-size: 5rem;
-    letter-spacing: 2px;
   }
-
-  .progress-bar-container {
-    max-width: 100%;
+  .countdown-display {
+    min-width: auto;
+    padding: 20px;
   }
-
-  .progress-bar-bg {
-    height: 25px;
-  }
-
-  .progress-marker {
-    height: 35px;
-  }
-
-  .progress-labels {
-    font-size: 0.75rem;
-  }
-
-  .btn-start,
-  .btn-stop,
-  .btn-reset {
-    padding: 15px 30px;
-    font-size: 1.2rem;
-  }
-
-  .btn-stop {
-    font-size: 1.5rem;
-    padding: 20px 40px;
-  }
-
   .result-title {
     font-size: 2rem;
   }
-
   .final-number {
     font-size: 3.5rem;
   }
 }
 
 @media (max-width: 480px) {
-  .countdown-number {
-    font-size: 4rem;
+  .game-wrapper {
+    padding: 15px;
   }
-
-  .progress-bar-bg {
-    height: 20px;
-  }
-
-  .progress-marker {
-    height: 30px;
-  }
-
-  .progress-labels {
-    font-size: 0.7rem;
-  }
-
   .game-title {
     font-size: 1.5rem;
   }
-
   .game-subtitle {
+    font-size: 1rem;
+  }
+  .countdown-number {
+    font-size: 4rem;
+  }
+  .btn-start, .btn-stop, .btn-reset {
+    padding: 15px 20px;
+    font-size: 1rem;
+    min-width: 180px;
+  }
+  .btn-stop {
     font-size: 1.2rem;
+    padding: 18px 30px;
   }
 }
 </style>
