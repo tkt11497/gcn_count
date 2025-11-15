@@ -49,7 +49,7 @@
             <!-- Target Zone Indicator -->
             <div 
               class="target-zone-indicator" 
-              :style="{ right: targetZoneStart + '%', width: targetZoneWidth + '%' }"
+              :style="{ right: targetZoneStart-3.6 + '%', width: targetZoneWidth + '%' }"
             ></div>
             <!-- Progress Fill -->
             <div 
@@ -105,7 +105,7 @@
           v-if="isActive" 
           @click="stopGame" 
           class="btn-stop"
-          :class="{ 'btn-pulse': isInTargetZone }"
+          :class="{ 'btn-pulse': true }"
         >
           <img src="@/assets/image/retri_skill.png" alt="Stop Now" />
         </button>
@@ -137,15 +137,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-const START_NUMBER = 300
-const TARGET_MIN = 19
-const TARGET_MAX = 41
+const START_NUMBER = 400
+const TARGET_MIN = 22
+const TARGET_MAX = 60
 
 // Speed control parameters
 const MIN_SPEED = 0.3 // Minimum speed multiplier (slowest)
-const MAX_SPEED = 2.2 // Maximum speed multiplier (fastest)
-const SPEED_CURVE = 2.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
-const MAX_SPEED_AT_PERCENT = 0.95 // Reach maximum speed at this percentage (0.3 = 30%)
+const MAX_SPEED = 2.1 // Maximum speed multiplier (fastest)
+const SPEED_CURVE = 1.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
+const MAX_SPEED_AT_PERCENT = 0.99 // Reach maximum speed at this percentage (0.3 = 30%)
 const SPEED_DIVISOR = 10 // Divisor for speed calculation (lower = faster overall)
 
 const currentNumber = ref(START_NUMBER) // Can be decimal for smooth countdown
@@ -252,7 +252,7 @@ const calculateSpeed = (number) => {
     // Calculate speed with curve (from MIN_SPEED to MAX_SPEED)
     speed = MIN_SPEED + (curvedProgress * (MAX_SPEED - MIN_SPEED))
   }
-  
+  //console.log('speed', speed)
   return speed
 }
 
@@ -663,7 +663,7 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   height: 100%;
-  background: #fff;
+  background: #ffdcdc;
   pointer-events: none;
   z-index: 1;
 }
