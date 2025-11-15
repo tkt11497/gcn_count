@@ -1,5 +1,5 @@
 <template>
-  <div class="reaction-test-container">
+  <div class="reaction-test-container" @click="handleContainerClick">
     <div class="hero-logo" :class="{ 'logo-active': isActive || isStopped }">
       <img src="@/assets/image/msl_logo.png" alt="MSL Logo" class="msl-logo" />
       <div class="logo-text-section" v-if="isActive || isStopped">
@@ -138,12 +138,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const START_NUMBER = 400
-const TARGET_MIN = 22
-const TARGET_MAX = 60
+const TARGET_MIN = 25
+const TARGET_MAX = 55
 
 // Speed control parameters
-const MIN_SPEED = 0.3 // Minimum speed multiplier (slowest)
-const MAX_SPEED = 2.1 // Maximum speed multiplier (fastest)
+const MIN_SPEED = 0.31 // Minimum speed multiplier (slowest)
+const MAX_SPEED = 2.18 // Maximum speed multiplier (fastest)
 const SPEED_CURVE = 1.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
 const MAX_SPEED_AT_PERCENT = 0.99 // Reach maximum speed at this percentage (0.3 = 30%)
 const SPEED_DIVISOR = 10 // Divisor for speed calculation (lower = faster overall)
@@ -330,6 +330,37 @@ const resetGame = () => {
   lastUpdateTime = null
 }
 
+// Fullscreen handler
+const requestFullscreen = () => {
+  const element = document.documentElement
+  
+  if (element.requestFullscreen) {
+    element.requestFullscreen().catch(err => {
+      console.log('Fullscreen request failed:', err)
+    })
+  } else if (element.webkitRequestFullscreen) { // Safari
+    element.webkitRequestFullscreen()
+  } else if (element.webkitRequestFullScreen) { // Older Safari
+    element.webkitRequestFullScreen()
+  } else if (element.mozRequestFullScreen) { // Firefox
+    element.mozRequestFullScreen()
+  } else if (element.msRequestFullscreen) { // IE/Edge
+    element.msRequestFullscreen()
+  }
+}
+
+const handleContainerClick = () => {
+  // Check if already in fullscreen
+  const isFullscreen = document.fullscreenElement || 
+                       document.webkitFullscreenElement || 
+                       document.mozFullScreenElement || 
+                       document.msFullscreenElement
+  
+  if (!isFullscreen) {
+    requestFullscreen()
+  }
+}
+
 // Keyboard support
 const handleKeyPress = (e) => {
   if (e.code === 'Space' || e.key === ' ') {
@@ -346,12 +377,37 @@ const handleKeyPress = (e) => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyPress)
+  
+  // Request fullscreen on mount
+  // Try immediately first, then fallback to delayed request
+  // (some browsers require user interaction)
+  try {
+    requestFullscreen()
+  } catch (err) {
+    // If immediate request fails, try after delay
+    setTimeout(() => {
+      requestFullscreen()
+    }, 500)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyPress)
   if (animationFrameId !== null) {
     cancelAnimationFrame(animationFrameId)
+  }
+  
+  // Exit fullscreen when component unmounts
+  if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen()
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen()
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen()
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen()
+    }
   }
 })
 </script>
