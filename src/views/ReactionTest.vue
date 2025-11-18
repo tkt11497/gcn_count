@@ -138,12 +138,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const START_NUMBER = 400
-const TARGET_MIN = 25
+const TARGET_MIN = 27
 const TARGET_MAX = 55
 
 // Speed control parameters
 const MIN_SPEED = 0.31 // Minimum speed multiplier (slowest)
-const MAX_SPEED = 2.18 // Maximum speed multiplier (fastest)
+const MAX_SPEED = 2.5 // Maximum speed multiplier (fastest)
 const SPEED_CURVE = 1.0 // Acceleration curve: 1.0 = linear, >1.0 = faster acceleration (more dramatic), <1.0 = slower acceleration (more gradual)
 const MAX_SPEED_AT_PERCENT = 0.99 // Reach maximum speed at this percentage (0.3 = 30%)
 const SPEED_DIVISOR = 10 // Divisor for speed calculation (lower = faster overall)
