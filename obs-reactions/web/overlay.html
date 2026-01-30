@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OBS Reactions Overlay</title>
+    <style>
+      :root {
+        font-size: 10px;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: transparent;
+        font-family: 'Montserrat', 'Arial', sans-serif;
+      }
+      #overlay {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      .reaction {
+        position: absolute;
+        font-size: clamp(4rem, 6vw, 8rem);
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        color: white;
+        font-weight: 700;
+        text-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        animation: floatUp 4s ease-out forwards;
+        pointer-events: none;
+      }
+      .reaction-label {
+        font-size: clamp(1.6rem, 2.2vw, 3rem);
+        text-transform: uppercase;
+        letter-spacing: 0.4rem;
+      }
+      @keyframes floatUp {
+        0% {
+          transform: translateY(0) scale(0.6);
+          opacity: 0;
+        }
+        10% {
+          opacity: 1;
+          transform: translateY(-20px) scale(1);
+        }
+        70% {
+          opacity: 0.9;
+        }
+        100% {
+          transform: translateY(-220px) scale(1.1);
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay"></div>
+
+    <script>
+      const overlay = document.getElementById('overlay')
+
+      const params = new URLSearchParams(window.location.search)
+      const WS_URL = params.get('ws') || 'ws://localhost:4000'
+
+      function connect() {
+        const ws = new WebSocket(WS_URL)
+
+        ws.onopen = () => console.log('[Overlay] Connected to', WS_URL)
+        ws.onerror = (err) => console.error('[Overlay] WS error', err)
+        ws.onclose = () => {
+          console.warn('[Overlay] Connection closed. Reconnecting in 2s...')
+          setTimeout(connect, 2000)
+        }
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data)
+
+          if (data.type === 'newReaction') {
+            spawnReaction(data.reaction)
+          } else if (data.type === 'init' && Array.isArray(data.reactions)) {
+            data.reactions.forEach(spawnReaction)
+          }
+        }
+      }
+
+      function spawnReaction(reaction) {
+        const el = document.createElement('div')
+        el.className = 'reaction'
+        el.style.left = `${reaction.x || 10}%`
+        el.style.bottom = '5%'
+
+        const emoji = document.createElement('span')
+        emoji.textContent = reaction.emoji || '🔥'
+
+        el.appendChild(emoji)
+
+        if (reaction.label) {
+          const label = document.createElement('span')
+          label.className = 'reaction-label'
+          label.textContent = reaction.label
+          label.style.color = reaction.color || '#ffffff'
+          el.appendChild(label)
+        }
+
+        overlay.appendChild(el)
+
+        setTimeout(() => {
+          el.remove()
+        }, 4000)
+      }
+
+      connect()
+    </script>
+  </body>
+</html>
+

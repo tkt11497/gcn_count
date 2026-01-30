@@ -5,6 +5,7 @@ import ViewStats from '@/views/ViewStats.vue'
 import ViewAuth from '@/views/ViewAuth.vue'
 import gcn_register from '@/views/gcn_register.vue'
 import privacy_policy from '@/views/privacy_policy.vue'
+import EsportsLanding from '@/views/EsportsLanding.vue'
 import home from '@/views/home.vue'
 import ViewYouTubeConnect from '@/views/ViewYouTubeConnect.vue'
 import ReactionTest from '@/views/ReactionTest.vue'
@@ -48,6 +49,11 @@ const routes = [
     component: privacy_policy
   },
   {
+    path: '/esports',
+    name: 'esports-landing',
+    component: EsportsLanding
+  },
+  {
     path: '/home',
     name: 'home',
     component: home
@@ -71,7 +77,7 @@ const router = createRouter({
 //navigation guards
 router.beforeEach(async (to, from) => {
   const storeAuth = useStoreAuth()
-  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base', 'reaction-test']
+  const publicPages = ['auth', 'register_gcn_sub_stream', 'base', 'privacy_policy','home','base', 'reaction-test', 'esports-landing']
   if (!storeAuth.user.id && !publicPages.includes(to.name)) {
     return { name: 'auth' }
   }

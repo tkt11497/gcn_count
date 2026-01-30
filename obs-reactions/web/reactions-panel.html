@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Send Reactions</title>
+    <style>
+      :root {
+        font-size: 10px;
+        font-family: 'Montserrat', 'Arial', sans-serif;
+        color: #fff;
+      }
+      body {
+        margin: 0;
+        padding: 2rem;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, #1b1b1b, #050505);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0;
+        letter-spacing: 0.4rem;
+        text-transform: uppercase;
+      }
+      .emoji-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+        gap: 1.5rem;
+        width: min(500px, 90vw);
+      }
+      button {
+        font-size: 4rem;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 1.2rem;
+        padding: 1.2rem;
+        cursor: pointer;
+        transition: transform 0.1s ease, border 0.1s ease, box-shadow 0.1s ease;
+        color: #fff;
+      }
+      button:hover {
+        transform: scale(1.1);
+        border-color: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+      }
+      button:active {
+        transform: scale(0.95);
+      }
+      .status {
+        font-size: 1.6rem;
+        color: rgba(255, 255, 255, 0.8);
+      }
+      .status.connected {
+        color: #3cff95;
+      }
+      .status.error {
+        color: #ff6b6b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>React to the Stream!</h1>
+    <div class="emoji-grid">
+      <button data-emoji="🔥" data-label="FIRE">🔥</button>
+      <button data-emoji="💯" data-label="GG">💯</button>
+      <button data-emoji="❤️" data-label="LOVE">❤️</button>
+      <button data-emoji="😂" data-label="LOL">😂</button>
+      <button data-emoji="👏" data-label="CLAP">👏</button>
+      <button data-emoji="😱" data-label="WOW">😱</button>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search)
+      const WS_URL = params.get('ws') || 'ws://localhost:4000'
+      const statusEl = document.getElementById('status')
+
+      let ws
+
+      function setStatus(text, variant = '') {
+        statusEl.textContent = text
+        statusEl.className = `status ${variant}`
+      }
+
+      function connect() {
+        ws = new WebSocket(WS_URL)
+
+        ws.onopen = () => setStatus('Connected', 'connected')
+        ws.onerror = () => setStatus('Connection error', 'error')
+        ws.onclose = () => {
+          setStatus('Disconnected. Reconnecting...', 'error')
+          setTimeout(connect, 1500)
+        }
+      }
+
+      connect()
+
+      document.querySelectorAll('button[data-emoji]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const payload = {
+            type: 'reaction',
+            emoji: button.dataset.emoji,
+            label: button.dataset.label || '',
+            color: '#ffffff',
+          }
+
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(payload))
+          } else {
+            setStatus('Not connected. Trying to reconnect...', 'error')
+            connect()
+          }
+        })
+      })
+    </script>
+  </body>
+</html>
+

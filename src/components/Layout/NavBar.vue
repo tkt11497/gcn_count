@@ -67,6 +67,15 @@
           </RouterLink>
           <RouterLink
             @click="showMobileNav = false"
+            to="/esports"
+            class="nav-link"
+            active-class="nav-active"
+          >
+            <span class="nav-icon">🎮</span>
+            <span class="nav-text">Esports</span>
+          </RouterLink>
+          <RouterLink
+            @click="showMobileNav = false"
             to="/privacy_policy"
             class="nav-link"
             active-class="nav-active"
