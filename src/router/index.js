@@ -13,10 +13,15 @@ import { useStoreAuth } from '@/stores/storeAuth'
 
 //const storeAuth = useStoreAuth()
 const routes = [
+  // {
+  //   path: '/',
+  //   name: 'base',
+  //   component: privacy_policy
+  // },
   {
     path: '/',
     name: 'base',
-    component: privacy_policy
+    component: EsportsLanding
   },
   {
     path: '/notes',

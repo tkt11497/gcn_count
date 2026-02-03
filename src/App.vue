@@ -20,7 +20,7 @@ const storeAuth = useStoreAuth()
 const route = useRoute()
 
 const showNavBar = computed(() => {
-  return route.name !== 'reaction-test' && route.name !== 'esports-landing'
+  return route.name !== 'reaction-test' && route.name !== 'esports-landing' && route.name !== 'base'
 })
 
 onMounted(() => {

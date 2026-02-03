@@ -8,12 +8,10 @@
                         <img src="/for_landing/gcn_logo.png" alt="GCN" class="nav-logo-img" />
                         <!-- <span class="logo-text">GAME CAST<br>NETWORK.</span> -->
                     </div>
-                    <button class="mobile-menu-btn" @click="isMobileMenuOpen = !isMobileMenuOpen">
-                        ☰
-                    </button>
                     <div class="nav-links" :class="{ 'active': isMobileMenuOpen }">
                         <a href="#about" class="nav-link" @click="isMobileMenuOpen = false">About</a>
                         <a href="#expertise" class="nav-link" @click="isMobileMenuOpen = false">Expertise</a>
+                        <a href="#process" class="nav-link" @click="isMobileMenuOpen = false">Process</a>
                         <a href="#works" class="nav-link" @click="isMobileMenuOpen = false">Works</a>
                         <a href="#team" class="nav-link" @click="isMobileMenuOpen = false">Team</a>
                         <a href="#tournament-gallery" class="nav-link" @click="isMobileMenuOpen = false">Gallery</a>
@@ -22,8 +20,17 @@
                     </div>
                 </div>
                 <div class="nav-right">
-                    <button class="mobile-menu-btn" @click="isMobileMenuOpen = !isMobileMenuOpen">
-                        ☰
+                    <button
+                        type="button"
+                        class="mobile-menu-btn"
+                        :class="{ 'mobile-menu-btn--open': isMobileMenuOpen }"
+                        :aria-expanded="isMobileMenuOpen"
+                        aria-label="Toggle menu"
+                        @click="isMobileMenuOpen = !isMobileMenuOpen"
+                    >
+                        <span class="mobile-menu-btn-bar"></span>
+                        <span class="mobile-menu-btn-bar"></span>
+                        <span class="mobile-menu-btn-bar"></span>
                     </button>
                 </div>
             </div>
@@ -195,6 +202,40 @@
                         <span class="approach-tagline-accent">We Create the Hype!</span>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <!-- How We Process Section -->
+        <section id="process" class="process-section" :class="{ 'section-inview': processVisible }" ref="processSectionRef">
+            <div class="container">
+                <p class="process-label">Our Process</p>
+                <h2 class="process-title">How We <span class="process-title-accent">Roll</span></h2>
+                <div class="process-steps">
+                    <article
+                        v-for="(step, index) in processSteps"
+                        :key="step.title"
+                        class="process-step"
+                        tabindex="0"
+                        :class="{ 'process-step--active': activeProcessStep === index }"
+                        @mouseenter="activeProcessStep = index"
+                        @mouseleave="activeProcessStep = null"
+                        @focus="activeProcessStep = index"
+                        @blur="activeProcessStep = null"
+                    >
+                        <div class="process-step-icon" :aria-hidden="true">
+                            <svg v-if="index === 0" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="8" width="28" height="20" rx="2" stroke="currentColor" stroke-width="2"/><path d="M32 28l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="38" cy="38" r="6" stroke="currentColor" stroke-width="2"/></svg>
+                            <svg v-else-if="index === 1" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="28" height="24" rx="2" stroke="currentColor" stroke-width="2"/><path d="M14 14h16M14 20h12M14 26h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M34 32l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="38" cy="36" r="3" fill="currentColor"/></svg>
+                            <svg v-else-if="index === 2" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 28c0-2 2-6 10-6s10 4 10 6v10c0 2-2 6-10 6S8 40 8 38V28z" stroke="currentColor" stroke-width="2"/><path d="M18 22c5.5 0 10-4.5 10-10S23.5 2 18 2 8 6.5 8 12s4.5 10 10 10z" stroke="currentColor" stroke-width="2"/><path d="M32 18l6 6 10-10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <svg v-else-if="index === 3" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="26" width="8" height="14" rx="1" stroke="currentColor" stroke-width="2"/><rect x="20" y="18" width="8" height="22" rx="1" stroke="currentColor" stroke-width="2"/><rect x="32" y="10" width="8" height="30" rx="1" stroke="currentColor" stroke-width="2"/><path d="M12 24l8-8 8 4 8-12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <h3 class="process-step-title">{{ step.title }}</h3>
+                        <p class="process-step-desc">{{ step.description }}</p>
+                    </article>
+                </div>
+                <!-- <div class="process-footer">
+                    <span class="process-tagline">From Passion to Impact – We Create the Hype!</span>
+                    <span class="process-brand">GCN</span>
+                </div> -->
             </div>
         </section>
 
@@ -579,21 +620,77 @@
                     </div>
                 </div>
 
-                <div class="event-gallery-footer">
+                <!-- <div class="event-gallery-footer">
                     <span class="event-gallery-tagline">From Passion to Impact – We Create the Hype!</span>
                     <span class="event-gallery-brand">GCN</span>
+                </div> -->
+            </div>
+        </section>
+
+        <!-- KOL Management Section -->
+        <section id="kol-management" class="kol-section" :class="{ 'section-inview': kolVisible }" ref="kolSectionRef">
+            <div class="container">
+               
+                <div class="kol-header">
+                    <div class="kol-header-text">
+                        <h2 class="kol-title">KOL Management</h2>
+                        <span class="kol-year">2024–2025</span>
+                        <p class="kol-desc">Since its global launch, we have been collaborating with over 15 KOLs and streamers to maximize Honor of Kings' (HOK) visibility and engagement in the gaming community. One of the key highlights was the KOL All-Star Tournament, where top influencers competed in thrilling matches, driving massive viewership and interaction. This tournament was seamlessly integrated into HOK's ongoing activities, creating excitement and strengthening the game's presence in the market.</p>
+                    </div>
+                    <div class="kol-grid-wrap">
+                        <div class="kol-grid">
+                            <div class="kol-avatar" v-for="(kol, index) in kolImages" :key="kol.src">
+                                <img :src="kol.src" :alt="kol.alt" />
+                            </div>
+                        </div>
+                        <div class="kol-kpis">
+                            <div class="kol-kpi">
+                                <span class="kol-kpi-value">2,000+</span>
+                                <span class="kol-kpi-label">Content Produced</span>
+                            </div>
+                            <div class="kol-kpi">
+                                <span class="kol-kpi-value">30M+</span>
+                                <span class="kol-kpi-label">Video Views</span>
+                            </div>
+                            <div class="kol-kpi">
+                                <span class="kol-kpi-value">2M+</span>
+                                <span class="kol-kpi-label">Engagement</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="kol-footer">
+                    <span class="kol-tagline">From Passion to Impact – We Create the Hype!</span>
+                    <span class="kol-brand">GCN</span>
                 </div>
             </div>
         </section>
 
         <!-- Contact Section -->
-        <section id="contact" class="contact-section">
+        <section id="contact" class="contact-section" :class="{ 'section-inview': contactVisible }" ref="contactSectionRef">
             <div class="container">
-                <h2 class="section-title">Ready to Create the Hype?</h2>
-                <p class="contact-subtitle">Let's build something amazing together</p>
-                <div class="contact-buttons">
-                    <button class="btn btn-primary">Get in Touch</button>
-                    <button class="btn btn-secondary">View Our Portfolio</button>
+                <div class="contact-card">
+                    <p class="contact-label">Get in Touch</p>
+                    <h2 class="contact-title">Ready to <span class="contact-title-accent">Create the Hype?</span></h2>
+                    <p class="contact-subtitle">Let's build something amazing together. Whether you're launching a game, building a community, or planning your next tournament — we're here for it.</p>
+                    <div class="contact-actions">
+                        <a href="mailto:contact@gcn.com" class="contact-btn contact-btn--primary">
+                            <span class="contact-btn-text">Get in Touch</span>
+                            <span class="contact-btn-icon" aria-hidden="true">→</span>
+                        </a>
+                        <a href="#" class="contact-btn contact-btn--secondary">
+                            <span class="contact-btn-text">View Our Portfolio</span>
+                            <span class="contact-btn-icon" aria-hidden="true">→</span>
+                        </a>
+                    </div>
+                    <div class="contact-info">
+                        <a href="mailto:hello@gamecastnetwork.com" class="contact-info-item">
+                            <span class="contact-info-icon" aria-hidden="true">✉</span>
+                            <span>hello@gamecastnetwork.com</span>
+                        </a>
+                        <span class="contact-info-divider">·</span>
+                        <span class="contact-info-item contact-info-tagline">From Passion to Impact – We Create the Hype!</span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -625,6 +722,9 @@ const aboutSectionRef = ref(null);
 const aboutVisible = ref(false);
 const approachSectionRef = ref(null);
 const approachVisible = ref(false);
+const processSectionRef = ref(null);
+const processVisible = ref(false);
+const activeProcessStep = ref(null);
 const regionsSectionRef = ref(null);
 const regionsVisible = ref(false);
 const clientsSectionRef = ref(null);
@@ -637,6 +737,35 @@ const galleryPmmcSectionRef = ref(null);
 const galleryPmmcVisible = ref(false);
 const eventGalleryRef = ref(null);
 const eventGalleryVisible = ref(false);
+const contactSectionRef = ref(null);
+const contactVisible = ref(false);
+const kolSectionRef = ref(null);
+const kolVisible = ref(false);
+
+const kolImages = [
+    { src: '/for_landing/kol/pp_01.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_02.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_03.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_04.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_05.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_06.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_07.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_08.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_09.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_10.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_11.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_12.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_13.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_14.png', alt: 'KOL' },
+    { src: '/for_landing/kol/pp_15.png', alt: 'KOL' }
+];
+
+const processSteps = [
+    { title: 'We Know the Game', description: 'We live in the scene. We understand how players think, grind, flex, and compete. From casual gamers to hardcore professionals, we read the culture fast and turn local insight into winning strategies.' },
+    { title: 'We Control the Narrative', description: 'Perception is power. With experience across multiple markets and global partners, we position brands to hit hard, cut through noise, and own their space in gaming and Esports.' },
+    { title: 'We Rally the Community', description: 'No fake hype. No shortcuts. We build real communities with strong ethics, bold creativity, and player-first execution, fueling game launches, tournaments, and movements people actually care about.' },
+    { title: 'We Create the Hype & Make It Last', description: "We don't chase moments. We build momentum. Through marketing, Esports, and live activations, we deliver impact that sticks growth, loyalty, and competitive energy that keeps rolling." }
+];
 
 const regions = ref([
     { id: 'myanmar', name: 'Myanmar', image: '/for_landing/myanmar.png' },
@@ -651,10 +780,10 @@ const liveUpcomingEvents = ref([
         statusClass: 'registration',
         bgImage: '/for_landing/live_bg_1.png',
         iconSrc: '/for_landing/trophy.svg',
-        title: 'PREMIER LEAGUE CUP',
-        subtitle: '2025/26 Season',
-        detail1: 'Start: Oct 2025',
-        detail2: 'Open for all Regions',
+        title: 'MSL Thailand',
+        subtitle: '2026/27 Season',
+        detail1: 'Start: APR 2026',
+        detail2: 'Open for Thailand',
         detail2Icon: null,
         cta: 'REGISTER NOW',
         liveDot: false
@@ -665,7 +794,7 @@ const liveUpcomingEvents = ref([
         statusClass: 'coming-soon',
         bgImage: '/for_landing/live_bg_2.png',
         iconSrc: '/for_landing/thunder_red.svg',
-        title: 'TR10 CUP',
+        title: 'MSL Myanmar Season 3',
         subtitle: '2026 Edition',
         detail1: 'Summer 2026',
         detail2: 'Largest Prize Pool Yet',
@@ -679,8 +808,8 @@ const liveUpcomingEvents = ref([
         statusClass: 'live-now',
         bgImage: '/for_landing/live_bg_3.png',
         iconSrc: null,
-        title: 'PREMIER LEAGUE CUP',
-        subtitle: '2025/26 Season',
+        title: 'MSL Thailand',
+        subtitle: '2026 Season',
         detail1: 'Myanmar, Thailand, Cambodia',
         detail2: 'Open Qualifiers: Round 1',
         detail2Icon: null,
@@ -747,6 +876,9 @@ onMounted(() => {
     observeSection(approachSectionRef.value, approachVisible);
     if (!approachSectionRef.value) approachVisible.value = true;
 
+    observeSection(processSectionRef.value, processVisible);
+    if (!processSectionRef.value) processVisible.value = true;
+
     observeSection(gallerySectionRef.value, galleryVisible);
     if (!gallerySectionRef.value) galleryVisible.value = true;
 
@@ -758,6 +890,12 @@ onMounted(() => {
 
     observeSection(eventGalleryRef.value, eventGalleryVisible);
     if (!eventGalleryRef.value) eventGalleryVisible.value = true;
+
+    observeSection(contactSectionRef.value, contactVisible);
+    if (!contactSectionRef.value) contactVisible.value = true;
+
+    observeSection(kolSectionRef.value, kolVisible);
+    if (!kolSectionRef.value) kolVisible.value = true;
 
     const regionsEl = regionsSectionRef.value;
     if (regionsEl) {
@@ -815,9 +953,9 @@ onUnmounted(() => {
 const teamMembers = ref([
     { name: 'Yone Fang', title: 'CEO', photo: '/for_landing/people/pp_06.png' },
     { name: 'Sai Kaung', title: 'Operation Director', photo: '/for_landing/people/pp_05.png' },
-    { name: 'Ye Thu', title: 'Marketing & Strategic Director', photo: '/for_landing/people/pp_04.png' },
-    { name: 'Min Gaung', title: 'Creative Director', photo: '/for_landing/people/pp_03.png' },
-    { name: 'Matt', title: 'Business Development Manager', photo: '/for_landing/people/pp_02.png' },
+    { name: 'Ye Thu', title: 'Marketing & Strategic Director', photo: '/for_landing/people/pp_02.png' },
+    { name: 'Min Gaung', title: 'Creative Director', photo: '/for_landing/people/pp_04.png' },
+    { name: 'Matt', title: 'Business Development Manager', photo: '/for_landing/people/pp_03.png' },
     { name: 'Bob', title: 'Broadcast Director', photo: '/for_landing/people/pp_01.png' }
 ]);
 
@@ -908,10 +1046,11 @@ const esportsCategories = ref([
 ]);
 
 const clients = ref([
+    { id: 12, name: 'Grab', image: '/for_landing/clients/Clients12.png' },
     { id: 1, name: 'MOBILE LEGENDS BANG BANG', image: '/for_landing/clients/Clients01.png' },
     { id: 2, name: 'HONOR OF KINGS', image: '/for_landing/clients/Clients02.png' },
     { id: 3, name: 'PUBG MOBILE', image: '/for_landing/clients/Clients03.png' },
-    { id: 4, name: 'TECNO', image: '/for_landing/clients/Clients04.png' },
+    
     { id: 5, name: 'KBZ Pay', image: '/for_landing/clients/Clients05.png' },
     { id: 6, name: 'HUAWEI', image: '/for_landing/clients/Clients06.png' },
     { id: 7, name: 'AYA PAY', image: '/for_landing/clients/Clients07.png' },
@@ -919,9 +1058,9 @@ const clients = ref([
     { id: 9, name: 'Power Flash', image: '/for_landing/clients/Clients09.png' },
     { id: 10, name: 'MPT', image: '/for_landing/clients/Clients10.png' },
     { id: 11, name: 'oppo', image: '/for_landing/clients/Clients11.png' },
-    { id: 12, name: 'Grab', image: '/for_landing/clients/Clients12.png' },
+    
     { id: 13, name: 'CODE', image: '/for_landing/clients/Clients13.png' },
-    { id: 14, name: 'Infinix', image: '/for_landing/clients/Clients14.png' },
+   
     { id: 15, name: 'ENERVON-C', image: '/for_landing/clients/Clients15.png' },
     { id: 16, name: 'REMAX', image: '/for_landing/clients/Clients16.png' },
     { id: 17, name: 'Rangoon cineplex', image: '/for_landing/clients/Clients17.png' },
@@ -1021,15 +1160,53 @@ $nav-height: 80px;
 
     .mobile-menu-btn {
         display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        width: 44px;
+        height: 44px;
         background: none;
         border: none;
-        color: white;
-        font-size: 1.5rem;
         cursor: pointer;
-        padding: 5px;
+        padding: 0;
+        border-radius: 10px;
+        transition: transform 0.2s ease, background 0.2s ease;
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        &:active {
+            transform: scale(0.92);
+            background: rgba(255, 255, 255, 0.12);
+        }
 
         @media (max-width: 960px) {
-            display: block;
+            display: flex;
+        }
+    }
+
+    .mobile-menu-btn-bar {
+        display: block;
+        width: 22px;
+        height: 2px;
+        background: white;
+        border-radius: 1px;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .mobile-menu-btn--open {
+        .mobile-menu-btn-bar:nth-child(1) {
+            transform: translateY(8px) rotate(45deg);
+        }
+
+        .mobile-menu-btn-bar:nth-child(2) {
+            opacity: 0;
+        }
+
+        .mobile-menu-btn-bar:nth-child(3) {
+            transform: translateY(-8px) rotate(-45deg);
         }
     }
 
@@ -1070,27 +1247,53 @@ $nav-height: 80px;
     }
 
     .nav-right {
+        display: flex;
+        align-items: center;
+
         @media (max-width: 960px) {
-            display: none;
+            display: flex;
         }
     }
 }
 
 // Hero Section
 .hero-section {
-    padding-top: calc(180px + #{$nav-height});
-    padding-bottom: 180px;
+    padding-top: calc(140px + #{$nav-height});
+    padding-bottom: 140px;
     background-image: url('/for_landing/hero.png');
-    background-size: 100% 100%;
-    background-position: center;
+    background-size: cover;
+    background-position: center center;
     background-repeat: no-repeat;
     text-align: center;
     position: relative;
     overflow: hidden;
+    min-height: 420px;
+
+    @media (max-width: 768px) {
+        padding-top: calc(100px + #{$nav-height});
+        padding-bottom: 80px;
+        min-height: 380px;
+        background-size: cover;
+        background-position: center 30%;
+    }
+
+    @media (max-width: 480px) {
+        padding-top: calc(80px + #{$nav-height});
+        padding-bottom: 60px;
+        min-height: 340px;
+        background-position: center 25%;
+    }
 
     .container {
         position: relative;
         z-index: 2;
+        padding-left: 24px;
+        padding-right: 24px;
+
+        @media (max-width: 480px) {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
     }
 
     .hero-content {
@@ -1099,13 +1302,23 @@ $nav-height: 80px;
     }
 
     .hero-title {
-        font-size: 4.5rem;
+        font-size: clamp(2rem, 6vw, 4.5rem);
         font-weight: 800;
         margin-bottom: 24px;
         line-height: 1.1;
         letter-spacing: -0.02em;
         color: white;
         text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+
+        @media (max-width: 768px) {
+            font-size: 2.25rem;
+            margin-bottom: 18px;
+        }
+
+        @media (max-width: 480px) {
+            font-size: 1.75rem;
+            margin-bottom: 14px;
+        }
     }
 
     .hero-subtitle {
@@ -1117,12 +1330,30 @@ $nav-height: 80px;
         margin-left: auto;
         margin-right: auto;
         text-shadow: 0 1px 5px rgba(0,0,0,0.5);
+
+        @media (max-width: 768px) {
+            font-size: 1.1rem;
+            margin-bottom: 32px;
+            line-height: 1.55;
+        }
+
+        @media (max-width: 480px) {
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
     }
 
     .hero-buttons {
         display: flex;
         justify-content: center;
-        gap: 20px;
+        flex-wrap: wrap;
+        gap: 16px;
+
+        @media (max-width: 480px) {
+            flex-direction: column;
+            gap: 12px;
+        }
 
         .btn {
             padding: 16px 36px;
@@ -1133,6 +1364,14 @@ $nav-height: 80px;
             transition: all 0.2s;
             border: none;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+
+            @media (max-width: 480px) {
+                padding: 14px 28px;
+                font-size: 1rem;
+                width: 100%;
+                max-width: 280px;
+                margin: 0 auto;
+            }
 
             &:hover {
                 transform: translateY(-2px);
@@ -1894,6 +2133,149 @@ section {
     font-weight: 700;
     color: $color-primary;
     margin-left: 2px;
+}
+
+// How We Process Section
+.process-section {
+    background: $color-darker;
+    padding: 100px 0 80px;
+    position: relative;
+}
+
+.process-label {
+    color: $color-text-muted;
+    font-size: 0.9rem;
+    margin: 0 0 8px;
+}
+
+.process-title {
+    font-size: clamp(2.25rem, 4vw, 3rem);
+    font-weight: 800;
+    color: white;
+    margin: 0 0 56px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+.process-title-accent {
+    color: $color-primary;
+}
+
+.process-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+    margin-bottom: 56px;
+
+    @media (max-width: 1024px) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        margin-bottom: 48px;
+    }
+}
+
+.process-step {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 32px 28px;
+    text-align: center;
+    cursor: default;
+    opacity: 0;
+    transform: translateY(24px);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+
+    &:hover,
+    &.process-step--active {
+        border-color: rgba($color-primary, 0.4);
+        box-shadow: 0 12px 40px rgba($color-primary, 0.12);
+        background: rgba($color-primary, 0.04);
+        transform: translateY(-6px);
+
+        .process-step-icon {
+            color: $color-primary;
+            transform: scale(1.08);
+        }
+
+        .process-step-title {
+            color: $color-primary;
+        }
+    }
+}
+
+.process-section.section-inview .process-step {
+    animation: scrollReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+
+    @for $i from 0 through 3 {
+        &:nth-child(#{$i + 1}) {
+            animation-delay: #{$i * 0.1}s;
+        }
+    }
+}
+
+.process-step-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    border: 2px solid rgba($color-primary, 0.35);
+    color: rgba($color-primary, 0.9);
+    transition: color 0.3s ease, transform 0.3s ease;
+
+    svg {
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+    }
+}
+
+.process-step-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 14px;
+    line-height: 1.3;
+    transition: color 0.3s ease;
+}
+
+.process-step-desc {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: $color-text-muted;
+    margin: 0;
+}
+
+.process-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+    @media (max-width: 600px) {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+}
+
+.process-tagline {
+    font-size: 0.9rem;
+    color: $color-text-muted;
+    font-style: italic;
+}
+
+.process-brand {
+    font-size: 0.9rem;
+    color: $color-text-muted;
+    font-weight: 600;
 }
 
 // Regions Section
@@ -3075,26 +3457,346 @@ section {
     font-weight: 600;
 }
 
-// Contact Section
-.contact-section {
-    background: linear-gradient(135deg, #1a1a2e 0%, $color-dark 100%);
-    text-align: center;
+// KOL Management Section
+.kol-section {
+    background: $color-darker;
+    padding: 100px 0 80px;
+    position: relative;
+}
 
-    .contact-subtitle {
-        font-size: 1.25rem;
-        color: $color-text-muted;
+.kol-label {
+    color: $color-text-muted;
+    font-size: 0.9rem;
+    margin: 0 0 12px;
+}
+
+.kol-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    align-items: start;
+    margin-bottom: 48px;
+
+    @media (max-width: 960px) {
+        grid-template-columns: 1fr;
+        gap: 40px;
         margin-bottom: 40px;
     }
+}
 
-    .contact-buttons {
-        display: flex;
-        justify-content: center;
-        gap: 20px;
+.kol-header-text {
+    min-width: 0;
+    opacity: 0;
+    transform: translateY(28px);
+}
 
-        @media (max-width: 600px) {
-            flex-direction: column;
+.kol-section.section-inview .kol-header-text {
+    animation: scrollReveal 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.kol-title {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 800;
+    color: white;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+.kol-year {
+    display: inline-block;
+    padding: 8px 20px;
+    background: rgba($color-primary, 0.12);
+    border: 2px solid $color-primary;
+    border-radius: 8px;
+    color: $color-primary;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 24px;
+}
+
+.kol-desc {
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: $color-text-muted;
+    margin: 0;
+}
+
+.kol-grid-wrap {
+    min-width: 0;
+    opacity: 0;
+    transform: translateY(28px);
+}
+
+.kol-section.section-inview .kol-grid-wrap {
+    animation: scrollReveal 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s forwards;
+}
+
+.kol-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+
+    @media (max-width: 640px) {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+}
+
+.kol-avatar {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    transition: border-color 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+
+    &:hover {
+        border-color: $color-primary;
+        transform: scale(1.08);
+        box-shadow: 0 8px 24px rgba($color-primary, 0.25);
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+}
+
+.kol-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.kol-kpi {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+
+    &:hover {
+        border-color: rgba($color-primary, 0.3);
+        background: rgba($color-primary, 0.06);
+        box-shadow: 0 8px 24px rgba($color-primary, 0.1);
+    }
+}
+
+.kol-kpi-value {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: $color-primary;
+    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+}
+
+.kol-kpi-label {
+    font-size: 0.9rem;
+    color: $color-text-muted;
+}
+
+.kol-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+    @media (max-width: 600px) {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+}
+
+.kol-tagline {
+    font-size: 0.9rem;
+    color: $color-text-muted;
+    font-style: italic;
+}
+
+.kol-brand {
+    font-size: 0.9rem;
+    color: $color-text-muted;
+    font-weight: 600;
+}
+
+// Contact Section
+.contact-section {
+    background: $color-darker;
+    padding: 100px 0 100px;
+    position: relative;
+}
+
+.contact-card {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 24px;
+    padding: 56px 48px 48px;
+    opacity: 0;
+    transform: translateY(28px);
+    transition: border-color 0.35s ease, box-shadow 0.35s ease;
+
+    &:hover {
+        border-color: rgba($color-primary, 0.2);
+        box-shadow: 0 20px 60px rgba($color-primary, 0.08);
+    }
+
+    @media (max-width: 640px) {
+        padding: 40px 24px 36px;
+    }
+}
+
+.contact-section.section-inview .contact-card {
+    animation: scrollReveal 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.contact-label {
+    font-size: 0.9rem;
+    color: $color-primary;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 12px;
+}
+
+.contact-title {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 800;
+    color: white;
+    margin: 0 0 20px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+.contact-title-accent {
+    color: $color-primary;
+}
+
+.contact-subtitle {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: $color-text-muted;
+    margin: 0 0 36px;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.contact-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 40px;
+
+    @media (max-width: 480px) {
+        flex-direction: column;
+    }
+}
+
+.contact-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 32px;
+    border-radius: 50px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease, color 0.25s ease;
+    border: 2px solid transparent;
+
+    &:hover {
+        transform: translateY(-3px) scale(1.02);
+    }
+
+    &:focus-visible {
+        outline: 2px solid $color-primary;
+        outline-offset: 4px;
+    }
+
+    &--primary {
+        background: $color-primary;
+        color: $color-darker;
+        box-shadow: 0 4px 20px rgba($color-primary, 0.35);
+
+        &:hover {
+            box-shadow: 0 12px 32px rgba($color-primary, 0.45);
+            background: lighten($color-primary, 4%);
         }
     }
+
+    &--secondary {
+        background: transparent;
+        color: white;
+        border-color: rgba($color-primary, 0.5);
+
+        &:hover {
+            border-color: $color-primary;
+            background: rgba($color-primary, 0.1);
+            color: $color-primary;
+            box-shadow: 0 8px 24px rgba($color-primary, 0.2);
+        }
+    }
+}
+
+.contact-btn-icon {
+    font-size: 1.2rem;
+    transition: transform 0.25s ease;
+}
+
+.contact-btn:hover .contact-btn-icon {
+    transform: translateX(4px);
+}
+
+.contact-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px 16px;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.contact-info-item {
+    font-size: 0.95rem;
+    color: $color-text-muted;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.25s ease;
+
+    &:hover {
+        color: $color-primary;
+    }
+}
+
+.contact-info-icon {
+    opacity: 0.9;
+}
+
+.contact-info-divider {
+    color: rgba(255, 255, 255, 0.2);
+    font-weight: 300;
+}
+
+.contact-info-tagline {
+    font-style: italic;
+    cursor: default;
 }
 
 // Footer
@@ -3136,22 +3838,14 @@ section {
     }
 }
 
-// Responsive
+// Responsive (global overrides; hero-section has its own responsive rules)
 @media (max-width: 960px) {
-    .hero-title {
-        font-size: 3rem;
-    }
-
     .section-title {
         font-size: 2.5rem;
     }
 }
 
 @media (max-width: 600px) {
-    .hero-title {
-        font-size: 2.2rem;
-    }
-
     .section-title {
         font-size: 2rem;
     }
