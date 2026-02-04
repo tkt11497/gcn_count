@@ -850,7 +850,18 @@ const scrollToSection = (sectionId) => {
 
 const observerOptions = { rootMargin: '0px 0px -80px 0px', threshold: 0.1 };
 
+const SEO_TITLE = 'Game Cast Network | Full-Service Gaming & Esports Solutions';
+const SEO_DESCRIPTION = 'Full-service gaming and esports solutions provider. Building ecosystems that connect publishers, players, creators, and communities across Myanmar, Cambodia, and Thailand. From Passion to Impact – We Create the Hype!';
+
 onMounted(() => {
+    document.title = SEO_TITLE;
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.setAttribute('content', SEO_DESCRIPTION);
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', SEO_TITLE);
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute('content', SEO_DESCRIPTION);
+
     window.addEventListener('scroll', handleScroll);
     if (typeof IntersectionObserver === 'undefined') return;
 
