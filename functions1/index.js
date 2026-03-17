@@ -236,7 +236,7 @@ export const getFacebookDashboardMetrics = onRequest({
     });
 
     const postsResp = await fbGet(`${pageId}/posts`, pageAccessToken, {
-      fields: 'id,created_time,message,permalink_url,attachments{media_type}',
+      fields: 'id,created_time,message,story,permalink_url,attachments{media_type,title,description}',
       limit: '50',
     });
 
@@ -248,6 +248,26 @@ export const getFacebookDashboardMetrics = onRequest({
         return ['video', 'reel', 'short_video'].includes(mediaType);
       })
       .slice(0, 10);
+
+    function resolvePostTitle(post) {
+      const message = (post?.message || '').trim();
+      if (message) {
+        return message;
+      }
+      const story = (post?.story || '').trim();
+      if (story) {
+        return story;
+      }
+      const attachmentTitle = (post?.attachments?.data?.[0]?.title || '').trim();
+      if (attachmentTitle) {
+        return attachmentTitle;
+      }
+      const attachmentDescription = (post?.attachments?.data?.[0]?.description || '').trim();
+      if (attachmentDescription) {
+        return attachmentDescription;
+      }
+      return '';
+    }
 
     async function tryPostMetric(postId, metricName) {
       try {
@@ -307,6 +327,7 @@ export const getFacebookDashboardMetrics = onRequest({
           post_id: post.id,
           created_time: post.created_time,
           permalink_url: post.permalink_url || '',
+          post_title: resolvePostTitle(post),
           ...metrics,
         };
       } catch (error) {
@@ -315,6 +336,7 @@ export const getFacebookDashboardMetrics = onRequest({
           post_id: post.id,
           created_time: post.created_time,
           permalink_url: post.permalink_url || '',
+          post_title: resolvePostTitle(post),
           impressions: null,
           reach: null,
           engagement: null,
@@ -329,6 +351,7 @@ export const getFacebookDashboardMetrics = onRequest({
           post_id: post.id,
           created_time: post.created_time,
           permalink_url: post.permalink_url || '',
+          video_title: resolvePostTitle(post),
           ...metrics,
         };
       } catch (error) {
@@ -337,6 +360,7 @@ export const getFacebookDashboardMetrics = onRequest({
           post_id: post.id,
           created_time: post.created_time,
           permalink_url: post.permalink_url || '',
+          video_title: resolvePostTitle(post),
           impressions: null,
           reach: null,
           engagement: null,
@@ -382,6 +406,7 @@ export const getFacebookDashboardMetrics = onRequest({
       last_10_posts: last10PostsMetrics.map((item) => ({
         post_id: item.post_id,
         created_time: item.created_time,
+        post_title: item.post_title || '',
         impressions: item.impressions,
         reach: item.reach,
         engagement: item.engagement,
@@ -389,6 +414,7 @@ export const getFacebookDashboardMetrics = onRequest({
       last_10_videos_reels: last10VideosReelsMetrics.map((item) => ({
         post_id: item.post_id,
         created_time: item.created_time,
+        video_title: item.video_title || '',
         impressions: item.impressions,
         reach: item.reach,
         engagement: item.engagement,
