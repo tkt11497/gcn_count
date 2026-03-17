@@ -253,6 +253,7 @@ export const getFacebookDashboardMetrics = onRequest({
       try {
         const insightsResp = await fbGet(`${postId}/insights`, pageAccessToken, {
           metric: metricName,
+          period: 'lifetime',
         });
         const metricObj = (insightsResp?.data || [])[0];
         const values = metricObj?.values || [];
@@ -266,9 +267,25 @@ export const getFacebookDashboardMetrics = onRequest({
       }
     }
 
+    async function tryMetricWithFallback(postId, metricNames) {
+      for (const metricName of metricNames) {
+        const value = await tryPostMetric(postId, metricName);
+        if (value !== null) {
+          return value;
+        }
+      }
+      return null;
+    }
+
     async function getPostMetrics(postId, includeViews = false) {
-      const impressions = await tryPostMetric(postId, 'page_posts_impressions');
-      const reach = await tryPostMetric(postId, 'post_impressions_unique');
+      const impressions = await tryMetricWithFallback(postId, [
+        'post_impressions',
+        'post_media_view',
+      ]);
+      const reach = await tryMetricWithFallback(postId, [
+        'post_impressions_unique',
+        'post_total_media_view_unique',
+      ]);
       const engagementMetric = includeViews
         ? 'post_video_social_actions_count_unique'
         : 'post_clicks';
