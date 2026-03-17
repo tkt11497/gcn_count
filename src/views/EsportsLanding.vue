@@ -986,23 +986,47 @@ function easeOutExpo(t) {
     return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
 }
 
+/*
+  This function animates the numbers shown in the "works" statistics section, giving a smooth counting-up effect.
+
+  1. First, it determines the target numbers to count to by extracting numeric values from each stat (removing any "+" symbol and converting to numbers).
+  2. It sets the total animation time (duration) to 1400 milliseconds (1.4 seconds).
+  3. It records the animation's start time using performance.now().
+  4. The inner function `update` is repeatedly called by requestAnimationFrame:
+      - It calculates how much time has elapsed since the animation started.
+      - It calculates progress (from 0 to 1) using how far the elapsed time is into the duration.
+      - It applies an "ease out expo" easing function so numbers increase quickly at first and slow down at the end.
+      - It updates the animatedWorksValues array, calculating the animated value for each stat based on progress.
+      - If progress isn't finished (<1), it requests the next animation frame, so the numbers keep animating.
+  5. The animation is kicked off by calling requestAnimationFrame(update), causing the numbers to start counting up.
+*/
 function animateWorksNumbers() {
+    // Get the numeric target values for each stat, e.g. "70+" turns to 70
     const targets = worksStats.value.map((stat) => parseInt(stat.number.replace(/\+/g, ''), 10) || 0);
+    // Animation duration in milliseconds
     const duration = 1400;
+    // Timestamp when animation starts
     const startTime = performance.now();
 
+    // Animation frame handler
     function update(currentTime) {
+        // Time elapsed since animation started
         const elapsed = currentTime - startTime;
+        // Progress value from 0 (start) to 1 (end)
         const progress = Math.min(elapsed / duration, 1);
+        // Easing for smooth effect
         const eased = easeOutExpo(progress);
 
+        // Update current animated values for display
         animatedWorksValues.value = targets.map((target) => Math.round(eased * target));
 
+        // Continue animating if not done
         if (progress < 1) {
             requestAnimationFrame(update);
         }
     }
 
+    // Start the animation
     requestAnimationFrame(update);
 }
 

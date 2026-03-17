@@ -170,6 +170,230 @@ export const healthCheck = onRequest({
   });
 });
 
+async function fbGet(path, token, params = {}) {
+  const query = new URLSearchParams({
+    ...params,
+    access_token: token,
+  });
+  const url = `https://graph.facebook.com/v25.0/${path}?${query.toString()}`;
+  const response = await fetch(url);
+  const data = await response.json();
+  if (!response.ok || data?.error) {
+    const message = data?.error?.message || `Facebook API error on ${path}`;
+    throw new Error(message);
+  }
+  return data;
+}
+
+function sumInsight(metricObj) {
+  const values = metricObj?.values || [];
+  return values.reduce((sum, item) => sum + Number(item?.value || 0), 0);
+}
+
+function latestInsightValue(metricObj) {
+  const values = metricObj?.values || [];
+  if (!values.length) {
+    return 0;
+  }
+  return Number(values[values.length - 1]?.value || 0);
+}
+
+function sumDailyMetric(metricObj) {
+  const values = metricObj?.values || [];
+  return values.reduce((sum, item) => sum + Number(item?.value || 0), 0);
+}
+
+/**
+ * Get formatted Facebook dashboard metrics for Lark workflow.
+ * POST body: { page_id: string, page_access_token: string }
+ */
+export const getFacebookDashboardMetrics = onRequest({
+  cors: true,
+  maxInstances: 10,
+}, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed. Use POST.' });
+      return;
+    }
+
+    const { page_id: pageId, page_access_token: pageAccessToken } = req.body || {};
+    if (!pageId || !pageAccessToken) {
+      res.status(400).json({
+        error: 'page_id and page_access_token are required',
+      });
+      return;
+    }
+
+    const pageNow = await fbGet(pageId, pageAccessToken, {
+      fields: 'name,fan_count,followers_count',
+    });
+
+    const postsResp = await fbGet(`${pageId}/posts`, pageAccessToken, {
+      fields: 'id,created_time,message,permalink_url,attachments{media_type}',
+      limit: '50',
+    });
+
+    const allPosts = postsResp?.data || [];
+    const last10Posts = allPosts.slice(0, 10);
+    const videoLikePosts = allPosts
+      .filter((post) => {
+        const mediaType = String(post?.attachments?.data?.[0]?.media_type || '').toLowerCase();
+        return ['video', 'reel', 'short_video'].includes(mediaType);
+      })
+      .slice(0, 10);
+
+    async function tryPostMetric(postId, metricName) {
+      try {
+        const insightsResp = await fbGet(`${postId}/insights`, pageAccessToken, {
+          metric: metricName,
+        });
+        const metricObj = (insightsResp?.data || [])[0];
+        const values = metricObj?.values || [];
+        if (!values.length) {
+          return null;
+        }
+        return Number(values[values.length - 1]?.value ?? null);
+      } catch (error) {
+        console.log(`Metric ${metricName} unavailable for ${postId}:`, error.message);
+        return null;
+      }
+    }
+
+    async function getPostMetrics(postId, includeViews = false) {
+      const impressions = await tryPostMetric(postId, 'page_posts_impressions');
+      const reach = await tryPostMetric(postId, 'post_impressions_unique');
+      const engagementMetric = includeViews
+        ? 'post_video_social_actions_count_unique'
+        : 'post_clicks';
+      const engagement = await tryPostMetric(postId, engagementMetric);
+      const views = includeViews ? await tryPostMetric(postId, 'post_video_views') : undefined;
+
+      return {
+        impressions,
+        reach,
+        engagement,
+        views,
+      };
+    }
+
+    const last10PostsMetrics = await Promise.all(last10Posts.map(async (post) => {
+      try {
+        const metrics = await getPostMetrics(post.id, false);
+        return {
+          post_id: post.id,
+          created_time: post.created_time,
+          permalink_url: post.permalink_url || '',
+          ...metrics,
+        };
+      } catch (error) {
+        console.log(`Skipping post insights for ${post.id}:`, error.message);
+        return {
+          post_id: post.id,
+          created_time: post.created_time,
+          permalink_url: post.permalink_url || '',
+          impressions: null,
+          reach: null,
+          engagement: null,
+        };
+      }
+    }));
+
+    const last10VideosReelsMetrics = await Promise.all(videoLikePosts.map(async (post) => {
+      try {
+        const metrics = await getPostMetrics(post.id, true);
+        return {
+          post_id: post.id,
+          created_time: post.created_time,
+          permalink_url: post.permalink_url || '',
+          ...metrics,
+        };
+      } catch (error) {
+        console.log(`Skipping video/reel insights for ${post.id}:`, error.message);
+        return {
+          post_id: post.id,
+          created_time: post.created_time,
+          permalink_url: post.permalink_url || '',
+          impressions: null,
+          reach: null,
+          engagement: null,
+          views: null,
+        };
+      }
+    }));
+
+    const totals30Resp = await fbGet(`${pageId}/insights`, pageAccessToken, {
+      metric: 'page_views_total,page_posts_impressions_unique,page_post_engagements',
+      period: 'day',
+      date_preset: 'last_30d',
+    });
+    const totalsByName = Object.fromEntries((totals30Resp?.data || []).map((metric) => [metric.name, metric]));
+
+    let followers30dAgo = null;
+    try {
+      const follows30Resp = await fbGet(`${pageId}/insights`, pageAccessToken, {
+        metric: 'page_daily_follows_unique,page_daily_unfollows_unique',
+        period: 'day',
+        date_preset: 'last_30d',
+      });
+      const followsByName = Object.fromEntries((follows30Resp?.data || []).map((metric) => [metric.name, metric]));
+      const follows = sumDailyMetric(followsByName.page_daily_follows_unique);
+      const unfollows = sumDailyMetric(followsByName.page_daily_unfollows_unique);
+      followers30dAgo = follows - unfollows;
+    } catch (error) {
+      console.log('follows/unfollows unavailable, returning null audience growth baseline:', error.message);
+      followers30dAgo = null;
+    }
+
+    const followersNow = Number(pageNow?.followers_count || 0);
+    const audienceGrowth30d = followers30dAgo === null ? null : followers30dAgo;
+
+    res.status(200).json({
+      ok: true,
+      page: {
+        page_id: pageId,
+        page_name: pageNow?.name || '',
+        likes_now: Number(pageNow?.fan_count || 0),
+        followers_now: followersNow,
+      },
+      last_10_posts: last10PostsMetrics.map((item) => ({
+        post_id: item.post_id,
+        created_time: item.created_time,
+        impressions: item.impressions,
+        reach: item.reach,
+        engagement: item.engagement,
+      })),
+      last_10_videos_reels: last10VideosReelsMetrics.map((item) => ({
+        post_id: item.post_id,
+        created_time: item.created_time,
+        impressions: item.impressions,
+        reach: item.reach,
+        engagement: item.engagement,
+        views: item.views,
+      })),
+      totals_last_30_days: {
+        total_view: sumInsight(totalsByName.page_views_total),
+        total_reach: sumInsight(totalsByName.page_posts_impressions_unique),
+        total_engagement: sumInsight(totalsByName.page_post_engagements),
+        total_audience_growth: audienceGrowth30d,
+      },
+    });
+  } catch (error) {
+    console.error('getFacebookDashboardMetrics error:', error);
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to fetch Facebook metrics',
+      message: error.message,
+    });
+  }
+});
+
 // Cache for YouTube live video searches (40 minutes = 2400000 ms)
 const youtubeSearchCache = new Map();
 const CACHE_DURATION = 40 * 60 * 1000; // 40 minutes in milliseconds

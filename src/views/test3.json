@@ -1,0 +1,135 @@
+{
+    "msg": "",
+    "code": 0,
+    "data": {
+      "approval_code": "56DD1832-7FAA-4F4D-B77E-E4BB4F28467C",
+      "department_id": "",
+      "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+      "instance_code": "8083AA42-FB95-4A99-9FFE-00FC6F44D7C6",
+      "end_time": "0",
+      "approval_name": "Cash Advance Request Form",
+      "serial_number": "202602210005",
+      "uuid": "2059ec7d",
+      "start_time": "1771653388617",
+      "form": [
+        {
+          "id": "widget17085080953570001",
+          "name": "Date Submitted",
+          "type": "date",
+          "ext": null,
+          "value": "2026-02-20T17:30:00Z",
+          "timezoneOffset": -390
+        },
+        {
+          "id": "widget17085081690190001",
+          "name": "Purpose of request",
+          "type": "input",
+          "ext": null,
+          "value": "testing"
+        },
+        {
+          "id": "widget17085082175890001",
+          "name": "Request Amount",
+          "type": "amount",
+          "ext": {
+            "capitalValue": "壹仟元整",
+            "currency": "MMK",
+            "currencyRange": [
+              "MMK",
+              "USD"
+            ],
+            "maxValue": "",
+            "minValue": ""
+          },
+          "value": 1000
+        },
+        {
+          "id": "widget17085082618260001",
+          "name": "Type of Expense",
+          "type": "radioV2",
+          "ext": null,
+          "value": "Other Expense",
+          "option": {
+            "key": "lsvlpfwk-k0v6hadsuzb-0",
+            "text": "Other Expense"
+          }
+        },
+        {
+          "id": "widget17085083556860001",
+          "name": "Payment Type",
+          "type": "radioV2",
+          "ext": null,
+          "value": "Cash",
+          "option": {
+            "key": "lsvlrgbq-7xg81pcq8ru-0",
+            "text": "Cash"
+          }
+        },
+        {
+          "id": "widget17085086381090001",
+          "name": "Budget Approver",
+          "type": "contact",
+          "ext": null,
+          "value": [
+            "5dg8f62c"
+          ],
+          "open_ids": [
+            "ou_1b53b19508b55ba53e076e5b1d360ae2"
+          ]
+        },
+        {
+          "id": "widget17085087125280001",
+          "name": "Serial no.",
+          "type": "serialNumber",
+          "ext": null,
+          "value": "GCNCA202602211534"
+        }
+      ],
+      "user_id": "5dg8f62c",
+      "timeline": [
+        {
+          "ext": "{}",
+          "create_time": "1771653388617",
+          "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+          "user_id": "5dg8f62c",
+          "node_key": "",
+          "type": "START"
+        },
+        {
+          "ext": "{}",
+          "user_id_list": [
+            "e158c444"
+          ],
+          "create_time": "1771653388794",
+          "open_id": "",
+          "node_key": "",
+          "open_id_list": [
+            "ou_544a2c63a04301404a0175084c4e46be"
+          ],
+          "type": "CC",
+          "cc_user_list": [
+            {
+              "open_id": "ou_544a2c63a04301404a0175084c4e46be",
+              "user_id": "e158c444",
+              "cc_id": "7609193375002070749"
+            }
+          ]
+        }
+      ],
+      "task_list": [
+        {
+          "start_time": "1771653388921",
+          "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+          "user_id": "5dg8f62c",
+          "end_time": "0",
+          "node_name": "Approval",
+          "id": "7609193365824884450",
+          "type": "AND",
+          "node_id": "54352f09ab1e87a08c28e06d1cc13206",
+          "status": "PENDING"
+        }
+      ],
+      "reverted": false,
+      "status": "PENDING"
+    }
+  }

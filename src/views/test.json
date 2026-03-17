@@ -1,0 +1,122 @@
+{
+    "msg": "",
+    "code": 0,
+    "data": {
+      "approval_code": "131C1896-5050-443B-ABF7-82485235636E",
+      "department_id": "",
+      "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+      "instance_code": "0065F3A6-2224-4071-8D3E-4C761C1C9E2D",
+      "end_time": "1771654337070",
+      "approval_name": "E-Claim",
+      "serial_number": "202602210007",
+      "uuid": "bb16d2bf",
+      "start_time": "1771654303203",
+      "form": "[{\"id\":\"widget17684693596690001\",\"name\":\"Link : Cash Advance\",\"type\":\"connect\",\"ext\":{\"serialIDs\":\"202602210005\"},\"value\":[\"8083AA42-FB95-4A99-9FFE-00FC6F44D7C6\"]},{\"id\":\"widget0\",\"name\":\"Expense Title\",\"type\":\"textarea\",\"ext\":null,\"value\":\"test\"},{\"id\":\"widget17084880782920001\",\"name\":\"Project Name\",\"type\":\"input\",\"ext\":null,\"value\":\"test\"},{\"id\":\"widget17084890252570001\",\"name\":\"Project ID\",\"type\":\"input\",\"ext\":null,\"value\":\"test\"},{\"id\":\"widget17084881326500001\",\"name\":\"Details\",\"type\":\"fieldList\",\"ext\":[{\"id\":\"widget17084882697030001\",\"type\":\"number\",\"value\":\"1000\"},{\"capitalValue\":\"\",\"id\":\"widget17084882577860001\",\"sumItems\":\"[{\\\"currency\\\":\\\"MMK\\\",\\\"value\\\":\\\"1000\\\"}]\",\"type\":\"amount\",\"value\":\"1000\"},{\"capitalValue\":\"\",\"id\":\"widget17084882861650001\",\"type\":\"formula\",\"value\":\"1000000\"}],\"value\":[[{\"id\":\"widget17084881390850001\",\"name\":\"Date\",\"type\":\"date\",\"ext\":null,\"value\":\"2026-02-20T17:30:00Z\",\"timezoneOffset\":-390},{\"id\":\"widget17084886516280001\",\"name\":\"Expense Type\",\"type\":\"radioV2\",\"ext\":null,\"value\":\"Other Expense\",\"option\":{\"key\":\"lsva14kt-l72odpo31l-0\",\"text\":\"Other Expense\"}},{\"id\":\"widget17084882209670001\",\"name\":\"Payment Type\",\"type\":\"radioV2\",\"ext\":null,\"value\":\"Cash\",\"option\":{\"key\":\"lsv9rwa2-e8c5d3brvi-0\",\"text\":\"Cash\"}},{\"id\":\"widget17084883572590001\",\"name\":\"Description\",\"type\":\"input\",\"ext\":null,\"value\":\"test\"},{\"id\":\"widget17084882697030001\",\"name\":\"Quantity\",\"type\":\"number\",\"ext\":null,\"value\":1000},{\"id\":\"widget17084882577860001\",\"name\":\"Unit Price\",\"type\":\"amount\",\"ext\":{\"capitalValue\":\"壹仟元整\",\"currency\":\"MMK\",\"currencyRange\":[\"MMK\",\"USD\"],\"maxValue\":\"\",\"minValue\":\"\"},\"value\":1000},{\"id\":\"widget17084882861650001\",\"name\":\"Amount\",\"type\":\"formula\",\"ext\":{\"capitalValue\":\"壹佰万元整\"},\"value\":1000000}]],\"option\":{\"input_type\":\"FORM\",\"mobile_detail_type\":\"CARD\",\"print_type\":\"FORM\"}},{\"id\":\"widget17084884253050001\",\"name\":\"Serial no.\",\"type\":\"serialNumber\",\"ext\":null,\"value\":\"GCNEC202602210002\"}]",
+      "user_id": "5dg8f62c",
+      "timeline": [
+        {
+          "ext": "{}",
+          "create_time": "1771654303203",
+          "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+          "user_id": "5dg8f62c",
+          "node_key": "",
+          "type": "START"
+        },
+        {
+          "ext": "{}",
+          "user_id_list": [
+            "e158c444"
+          ],
+          "create_time": "1771654303356",
+          "open_id": "",
+          "node_key": "",
+          "open_id_list": [
+            "ou_544a2c63a04301404a0175084c4e46be"
+          ],
+          "type": "CC",
+          "cc_user_list": [
+            {
+              "open_id": "ou_544a2c63a04301404a0175084c4e46be",
+              "user_id": "e158c444",
+              "cc_id": "7609197303349399265"
+            }
+          ]
+        },
+        {
+          "ext": "{}",
+          "user_id_list": [
+            "d34489cc"
+          ],
+          "create_time": "1771654303365",
+          "open_id": "",
+          "node_key": "",
+          "open_id_list": [
+            "ou_da4f0c7e135b4735f6282582a7338fd0"
+          ],
+          "type": "CC",
+          "cc_user_list": [
+            {
+              "open_id": "ou_da4f0c7e135b4735f6282582a7338fd0",
+              "user_id": "d34489cc",
+              "cc_id": "7609197303273885407"
+            }
+          ]
+        },
+        {
+          "ext": "{}",
+          "create_time": "1771654337049",
+          "open_id": "ou_5527264c9ef3efde7fdf63d81a350c0a",
+          "user_id": "459gf923",
+          "node_key": "APPROVAL_531699_2715989",
+          "task_id": "7609197293979324130",
+          "type": "PASS"
+        },
+        {
+          "ext": "{}",
+          "user_id_list": [
+            "d34489cc"
+          ],
+          "create_time": "1771654337071",
+          "open_id": "",
+          "node_key": "",
+          "open_id_list": [
+            "ou_da4f0c7e135b4735f6282582a7338fd0"
+          ],
+          "type": "CC",
+          "cc_user_list": [
+            {
+              "open_id": "ou_da4f0c7e135b4735f6282582a7338fd0",
+              "user_id": "d34489cc",
+              "cc_id": "7609197438187884255"
+            }
+          ]
+        }
+      ],
+      "task_list": [
+        {
+          "start_time": "1771654303504",
+          "open_id": "ou_5527264c9ef3efde7fdf63d81a350c0a",
+          "user_id": "459gf923",
+          "end_time": "1771654337049",
+          "node_name": "Approval",
+          "id": "7609197293979324130",
+          "type": "AND",
+          "node_id": "76b4c2891785cca9b614e1146a3757fc",
+          "status": "APPROVED"
+        },
+        {
+          "start_time": "1771654303504",
+          "open_id": "ou_1b53b19508b55ba53e076e5b1d360ae2",
+          "user_id": "5dg8f62c",
+          "end_time": "1771654303640",
+          "node_name": "Approval",
+          "id": "7609197294000279259",
+          "type": "AND",
+          "node_id": "76b4c2891785cca9b614e1146a3757fc",
+          "status": "DONE"
+        }
+      ],
+      "reverted": false,
+      "status": "APPROVED"
+    }
+  }
