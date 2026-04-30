@@ -7,6 +7,8 @@ export {
   saveSyncConfig,
   testSheetConnection,
   runSheetSync,
+  startYouTubeOAuth,
+  oauthCallbackYouTube,
   startTikTokOAuth,
   oauthCallbackTikTok,
   scheduledSheetSync,

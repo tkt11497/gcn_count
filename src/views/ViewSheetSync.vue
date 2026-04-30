@@ -121,9 +121,20 @@
           ></textarea>
         </label>
 
+        <div class="two-col">
+          <label>
+            Google OAuth client ID
+            <input v-model.trim="secrets.googleOAuthClientId" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            Google OAuth client secret
+            <input v-model.trim="secrets.googleOAuthClientSecret" type="password" autocomplete="new-password" />
+          </label>
+        </div>
+
         <label>
-          YouTube API key
-          <input v-model.trim="secrets.youtubeApiKey" type="password" autocomplete="new-password" />
+          YouTube redirect URI
+          <input v-model.trim="secrets.youtubeRedirectUri" type="text" :placeholder="YOUTUBE_REDIRECT_URI" />
         </label>
 
         <div class="two-col">
@@ -183,7 +194,7 @@
             <input v-model="form.selectedAccounts.youtube" type="checkbox" :value="channel.id" />
             <span>
               {{ channel.name || channel.id }}
-              <small>{{ channel.id }}</small>
+              <small>{{ channel.id }}{{ channel.connectedAs ? ` - ${channel.connectedAs}` : '' }}</small>
             </span>
           </label>
           <p v-if="!youtubeChannels.length" class="empty-note">No YouTube channels connected.</p>
@@ -218,6 +229,7 @@
       <div class="actions">
         <button :disabled="busy" @click="previewSync">Preview Sync</button>
         <button :disabled="busy" @click="runSync">Run Now</button>
+        <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
         <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
       </div>
       <p v-if="message" class="message" :class="{ error: messageType === 'error' }">{{ message }}</p>
@@ -331,10 +343,12 @@ import {
 const CONFIG_ID = 'default'
 const CLOUD_FUNCTION_BASE_URL = 'https://us-central1-gcc-live-count.cloudfunctions.net'
 const TIKTOK_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackTikTok`
+const YOUTUBE_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackYouTube`
 const FUNCTION_ENDPOINTS = {
   saveConfig: `${CLOUD_FUNCTION_BASE_URL}/saveSyncConfig`,
   testSheet: `${CLOUD_FUNCTION_BASE_URL}/testSheetConnection`,
   runSync: `${CLOUD_FUNCTION_BASE_URL}/runSheetSync`,
+  startYouTube: `${CLOUD_FUNCTION_BASE_URL}/startYouTubeOAuth`,
   startTikTok: `${CLOUD_FUNCTION_BASE_URL}/startTikTokOAuth`
 }
 
@@ -384,7 +398,9 @@ const form = reactive({
 
 const secrets = reactive({
   googleServiceAccountJson: '',
-  youtubeApiKey: '',
+  googleOAuthClientId: '',
+  googleOAuthClientSecret: '',
+  youtubeRedirectUri: YOUTUBE_REDIRECT_URI,
   tiktokClientKey: '',
   tiktokClientSecret: '',
   tiktokRedirectUri: TIKTOK_REDIRECT_URI
@@ -608,6 +624,20 @@ async function connectTikTok() {
     const result = await postJson(FUNCTION_ENDPOINTS.startTikTok, { configId: CONFIG_ID })
     window.open(result.authUrl, '_blank', 'noopener,noreferrer')
     setMessage(`TikTok authorization opened. Redirect URI: ${result.redirectUri || TIKTOK_REDIRECT_URI}`)
+  } catch (error) {
+    setMessage(error.message, 'error')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function connectYouTube() {
+  busy.value = true
+  setMessage('')
+  try {
+    const result = await postJson(FUNCTION_ENDPOINTS.startYouTube, { configId: CONFIG_ID })
+    window.open(result.authUrl, '_blank', 'noopener,noreferrer')
+    setMessage(`YouTube authorization opened. Redirect URI: ${result.redirectUri || YOUTUBE_REDIRECT_URI}`)
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {

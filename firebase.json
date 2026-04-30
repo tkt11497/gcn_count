@@ -14,6 +14,8 @@
       { "source": "/api/sheet-sync/config", "function": "saveSyncConfig" },
       { "source": "/api/sheet-sync/test", "function": "testSheetConnection" },
       { "source": "/api/sheet-sync/run", "function": "runSheetSync" },
+      { "source": "/api/youtube/start", "function": "startYouTubeOAuth" },
+      { "source": "/api/youtube/callback", "function": "oauthCallbackYouTube" },
       { "source": "/api/tiktok/start", "function": "startTikTokOAuth" },
       { "source": "/api/tiktok/callback", "function": "oauthCallbackTikTok" },
       { "source": "**", "destination": "/index.html" }

@@ -9,6 +9,7 @@ import fetch from 'node-fetch';
 const DEFAULT_CONFIG_ID = 'default';
 const DEFAULT_TIMEZONE = 'Asia/Rangoon';
 const DEFAULT_TIKTOK_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok';
+const DEFAULT_YOUTUBE_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackYouTube';
 const SHEET_HEADERS = [
   'Date',
   'Content',
@@ -239,6 +240,9 @@ async function saveSecretPatch(configId, secrets = {}) {
   const fieldNames = [
     'googleServiceAccountJson',
     'youtubeApiKey',
+    'googleOAuthClientId',
+    'googleOAuthClientSecret',
+    'youtubeRedirectUri',
     'tiktokClientKey',
     'tiktokClientSecret',
     'tiktokRedirectUri',
@@ -581,6 +585,17 @@ async function commitSnapshotWrites(items) {
   }
 }
 
+async function commitSnapshotDeletes(refs) {
+  const chunkSize = 450;
+  for (let index = 0; index < refs.length; index += chunkSize) {
+    const batch = db().batch();
+    for (const ref of refs.slice(index, index + chunkSize)) {
+      batch.delete(ref);
+    }
+    await batch.commit();
+  }
+}
+
 async function fbGet(path, token, params = {}) {
   const query = new URLSearchParams({ ...params, access_token: token });
   const response = await fetch(`https://graph.facebook.com/v25.0/${path}?${query.toString()}`);
@@ -767,6 +782,18 @@ async function youtubeApi(configId, path, params) {
   return data;
 }
 
+async function youtubeDataApiWithToken(accessToken, path, params) {
+  const query = new URLSearchParams(params);
+  const response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error?.message || `YouTube Data API error on ${path}`);
+  }
+  return data;
+}
+
 async function resolveYouTubeChannel(configId, channelIdOrHandle) {
   if (String(channelIdOrHandle).startsWith('UC')) return channelIdOrHandle;
   const handle = String(channelIdOrHandle).replace(/^@/, '');
@@ -775,6 +802,170 @@ async function resolveYouTubeChannel(configId, channelIdOrHandle) {
     forHandle: handle,
   });
   return data?.items?.[0]?.id || channelIdOrHandle;
+}
+
+async function getYouTubeOAuthConfig(configId) {
+  const [clientId, clientSecret, savedRedirectUri] = await Promise.all([
+    getSecretValue(configId, 'googleOAuthClientId', ['GOOGLE_OAUTH_CLIENT_ID', 'YOUTUBE_CLIENT_ID']),
+    getSecretValue(configId, 'googleOAuthClientSecret', ['GOOGLE_OAUTH_CLIENT_SECRET', 'YOUTUBE_CLIENT_SECRET']),
+    getSecretValue(configId, 'youtubeRedirectUri', ['YOUTUBE_REDIRECT_URI']),
+  ]);
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth client ID/secret are not configured');
+  }
+  const trimmedRedirectUri = String(savedRedirectUri || '').trim();
+  const redirectUri = trimmedRedirectUri === DEFAULT_YOUTUBE_REDIRECT_URI
+    ? trimmedRedirectUri
+    : DEFAULT_YOUTUBE_REDIRECT_URI;
+  return { clientId, clientSecret, redirectUri };
+}
+
+async function youtubeTokenRequest(params) {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error_description || data?.error || `YouTube OAuth error ${response.status}`);
+  }
+  return data;
+}
+
+async function saveYouTubeTokenSecret(accountId, tokenData, existingTokens = {}) {
+  const tokens = {
+    ...existingTokens,
+    ...tokenData,
+    refresh_token: tokenData.refresh_token || existingTokens.refresh_token,
+    expires_at: Date.now() + Math.max(60, Number(tokenData.expires_in || 3600) - 60) * 1000,
+  };
+  await db().collection('social_account_secrets').doc(accountId).set({
+    provider: 'youtube',
+    tokens: JSON.stringify(tokens),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return tokens;
+}
+
+async function getYouTubeTokenSecret(accountId) {
+  const secretSnap = await db().collection('social_account_secrets').doc(accountId).get();
+  if (!secretSnap.exists) throw new Error(`Missing YouTube OAuth token for ${accountId}`);
+  return JSON.parse(secretSnap.data()?.tokens || '{}');
+}
+
+async function getYouTubeAccessToken(configId, accountId) {
+  const tokens = await getYouTubeTokenSecret(accountId);
+  if (tokens.access_token && Number(tokens.expires_at || 0) > Date.now()) return tokens.access_token;
+  if (!tokens.refresh_token) throw new Error(`Missing YouTube refresh token for ${accountId}`);
+
+  const { clientId, clientSecret } = await getYouTubeOAuthConfig(configId);
+  const refreshed = await youtubeTokenRequest({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: tokens.refresh_token,
+    grant_type: 'refresh_token',
+  });
+  const merged = await saveYouTubeTokenSecret(accountId, refreshed, tokens);
+  return merged.access_token;
+}
+
+async function youtubeAnalyticsQuery(accessToken, params) {
+  const query = new URLSearchParams(params);
+  const response = await fetch(`https://youtubeanalytics.googleapis.com/v2/reports?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error?.message || `YouTube Analytics API error ${response.status}`);
+  }
+  return data;
+}
+
+function analyticsColumnMap(data) {
+  return Object.fromEntries((data?.columnHeaders || []).map((header, index) => [header.name, index]));
+}
+
+function analyticsNumber(row, columnMap, name) {
+  return nullableNumber(row?.[columnMap[name]]);
+}
+
+async function getYouTubeSubscriberDelta(accessToken, channelId, startDate, endDate) {
+  if (!startDate || !endDate || startDate > endDate) return null;
+  const data = await youtubeAnalyticsQuery(accessToken, {
+    ids: `channel==${channelId}`,
+    startDate,
+    endDate,
+    metrics: 'subscribersGained,subscribersLost',
+    dimensions: 'day',
+  });
+  const columns = analyticsColumnMap(data);
+  return (data?.rows || []).reduce((sum, row) => {
+    const gained = analyticsNumber(row, columns, 'subscribersGained') || 0;
+    const lost = analyticsNumber(row, columns, 'subscribersLost') || 0;
+    return sum + gained - lost;
+  }, 0);
+}
+
+async function estimateYouTubeSubscribersOnDate(accessToken, channelId, currentSubscribers, targetDate, timezone) {
+  const current = nullableNumber(currentSubscribers);
+  if (current === null || !targetDate) return null;
+  const today = localDateString(new Date(), timezone);
+  if (targetDate >= today) return { followers: current, sourceDate: today };
+
+  const afterTarget = shiftIsoDate(targetDate, 1);
+  const deltaAfterTarget = await getYouTubeSubscriberDelta(accessToken, channelId, afterTarget, today);
+  if (deltaAfterTarget === null) return null;
+  return {
+    followers: current - deltaAfterTarget,
+    sourceDate: targetDate,
+  };
+}
+
+async function queryYouTubeVideoMetrics(accessToken, channelId, videoIds, config) {
+  if (!videoIds.length) return new Map();
+  const result = new Map();
+  for (let index = 0; index < videoIds.length; index += 200) {
+    const ids = videoIds.slice(index, index + 200);
+    let data;
+    try {
+      data = await youtubeAnalyticsQuery(accessToken, {
+        ids: `channel==${channelId}`,
+        startDate: config.startDate,
+        endDate: config.endDate,
+        metrics: 'views,likes,comments,shares,videoThumbnailImpressions',
+        dimensions: 'video',
+        filters: `video==${ids.join(',')}`,
+        maxResults: String(ids.length),
+      });
+    } catch (error) {
+      data = await youtubeAnalyticsQuery(accessToken, {
+        ids: `channel==${channelId}`,
+        startDate: config.startDate,
+        endDate: config.endDate,
+        metrics: 'views,likes,comments,shares',
+        dimensions: 'video',
+        filters: `video==${ids.join(',')}`,
+        maxResults: String(ids.length),
+      });
+    }
+    const columns = analyticsColumnMap(data);
+    for (const row of data?.rows || []) {
+      const videoId = row[columns.video];
+      if (!videoId) continue;
+      const views = analyticsNumber(row, columns, 'views');
+      const likes = analyticsNumber(row, columns, 'likes') || 0;
+      const comments = analyticsNumber(row, columns, 'comments') || 0;
+      const shares = analyticsNumber(row, columns, 'shares') || 0;
+      const impressions = analyticsNumber(row, columns, 'videoThumbnailImpressions');
+      result.set(videoId, {
+        views,
+        interactions: likes + comments + shares,
+        impressions,
+      });
+    }
+  }
+  return result;
 }
 
 async function discoverYouTubeRows(configId, config) {
@@ -791,15 +982,18 @@ async function discoverYouTubeRows(configId, config) {
     if (selectedChannelIds.size && !selectedChannelIds.has(String(channel.id))) continue;
     try {
       const actualChannelId = await resolveYouTubeChannel(configId, channel.id);
+      const oauthAccountId = channel.oauthAccountId || `youtube_${sanitizeDocId(actualChannelId)}`;
+      const accessToken = await getYouTubeAccessToken(configId, oauthAccountId);
       await db().collection('social_accounts').doc(`youtube_${sanitizeDocId(channel.id)}`).set({
         platform: 'youtube',
         accountId: channel.id,
         resolvedChannelId: actualChannelId,
+        oauthAccountId,
         displayName: channel.name || channel.id,
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      const search = await youtubeApi(configId, 'search', {
+      const search = await youtubeDataApiWithToken(accessToken, 'search', {
         part: 'id,snippet',
         channelId: actualChannelId,
         type: 'video',
@@ -811,15 +1005,20 @@ async function discoverYouTubeRows(configId, config) {
       const videoIds = (search?.items || []).map((item) => item?.id?.videoId).filter(Boolean);
       if (!videoIds.length) continue;
 
-      const videos = await youtubeApi(configId, 'videos', {
-        part: 'snippet,statistics,liveStreamingDetails',
-        id: videoIds.join(','),
-      });
+      const [videos, metricMap] = await Promise.all([
+        youtubeDataApiWithToken(accessToken, 'videos', {
+          part: 'snippet,statistics,liveStreamingDetails',
+          id: videoIds.join(','),
+        }),
+        queryYouTubeVideoMetrics(accessToken, actualChannelId, videoIds, config),
+      ]);
 
       for (const video of videos?.items || []) {
         const stats = video.statistics || {};
-        const views = toNumber(stats.viewCount);
-        const interactions = toNumber(stats.likeCount) + toNumber(stats.commentCount);
+        const analyticsMetrics = metricMap.get(video.id) || {};
+        const views = analyticsMetrics.views ?? nullableNumber(stats.viewCount);
+        const interactions = analyticsMetrics.interactions
+          ?? (toNumber(stats.likeCount) + toNumber(stats.commentCount));
         const type = video.liveStreamingDetails ? 'Live' : 'Video';
         const createdAt = video?.snippet?.publishedAt || new Date().toISOString();
         const link = `https://www.youtube.com/watch?v=${video.id}`;
@@ -836,12 +1035,12 @@ async function discoverYouTubeRows(configId, config) {
             'YouTube',
             type,
             link,
-            '-',
+            numberOrDash(analyticsMetrics.impressions),
             numberOrDash(views),
             numberOrDash(interactions),
             numberOrDash(views),
           ],
-          metrics: { views, interactions },
+          metrics: { views, interactions, impressions: analyticsMetrics.impressions },
         });
       }
     } catch (error) {
@@ -1114,47 +1313,51 @@ async function getYouTubeSubscriberAccounts(configId, config) {
   const accounts = [];
   const channelsSnap = await db().collection('youtube_channels').get();
   const selectedChannelIds = new Set(config.selectedAccounts?.youtube || []);
-  const channelRequests = [];
 
   for (const channelDoc of channelsSnap.docs) {
     const channel = { id: channelDoc.id, ...channelDoc.data() };
     if (selectedChannelIds.size && !selectedChannelIds.has(String(channel.id))) continue;
     try {
-      channelRequests.push({
-        originalId: String(channel.id),
-        name: channel.name || channel.id,
-        resolvedId: await resolveYouTubeChannel(configId, channel.id),
-      });
-    } catch (error) {
-      errors.push({ platform: 'youtube', accountId: channel.id, message: error.message });
-    }
-  }
-
-  for (let index = 0; index < channelRequests.length; index += 50) {
-    const chunk = channelRequests.slice(index, index + 50);
-    const ids = chunk.map((channel) => channel.resolvedId).filter(Boolean);
-    if (!ids.length) continue;
-    try {
-      const data = await youtubeApi(configId, 'channels', {
+      const resolvedId = await resolveYouTubeChannel(configId, channel.id);
+      const oauthAccountId = channel.oauthAccountId || `youtube_${sanitizeDocId(resolvedId)}`;
+      const accessToken = await getYouTubeAccessToken(configId, oauthAccountId);
+      const data = await youtubeDataApiWithToken(accessToken, 'channels', {
         part: 'snippet,statistics',
-        id: ids.join(','),
-        maxResults: '50',
+        id: resolvedId,
       });
-      for (const channel of data?.items || []) {
-        const subscribers = nullableNumber(channel?.statistics?.subscriberCount);
-        if (subscribers !== null) {
-          const fallback = chunk.find((item) => item.resolvedId === channel.id);
-          accounts.push({
-            platform: 'YouTube',
-            platformKey: 'youtube',
-            accountId: String(channel.id || fallback?.originalId || ''),
-            accountName: channel?.snippet?.title || fallback?.name || channel.id,
-            followers: subscribers,
-          });
-        }
+      const connectedChannel = data?.items?.[0];
+      const subscribers = nullableNumber(connectedChannel?.statistics?.subscriberCount);
+      if (subscribers !== null) {
+        const [startSubscribers, endSubscribers] = await Promise.all([
+          estimateYouTubeSubscribersOnDate(
+            accessToken,
+            connectedChannel.id,
+            subscribers,
+            config.startDate,
+            config.timezone,
+          ),
+          estimateYouTubeSubscribersOnDate(
+            accessToken,
+            connectedChannel.id,
+            subscribers,
+            config.endDate,
+            config.timezone,
+          ),
+        ]);
+        accounts.push({
+          platform: 'YouTube',
+          platformKey: 'youtube',
+          accountId: String(connectedChannel.id || resolvedId),
+          accountName: connectedChannel?.snippet?.title || channel.name || channel.id,
+          followers: subscribers,
+          startFollowers: startSubscribers?.followers ?? null,
+          startFollowersSourceDate: startSubscribers?.sourceDate || '',
+          endFollowers: endSubscribers?.followers ?? null,
+          endFollowersSourceDate: endSubscribers?.sourceDate || '',
+        });
       }
     } catch (error) {
-      errors.push({ platform: 'youtube', accountId: ids.join(','), message: error.message });
+      errors.push({ platform: 'youtube', accountId: channel.id, message: error.message });
     }
   }
 
@@ -1527,9 +1730,11 @@ async function writeFollowerSheet(configId, config, rows) {
   let appended = 0;
   let updated = 0;
   const snapshotWrites = [];
+  const currentSnapshotIds = new Set();
 
   for (const item of rows) {
     const docId = sanitizeDocId(`${configId}:${config.startDate}:${config.endDate}:${item.key}`);
+    currentSnapshotIds.add(docId);
     const snapshotRef = snapshots.doc(docId);
     const snapshot = await snapshotRef.get();
 
@@ -1562,6 +1767,21 @@ async function writeFollowerSheet(configId, config, rows) {
   }
 
   await commitSnapshotWrites(snapshotWrites);
+  const existingRangeSnap = await snapshots
+    .where('configId', '==', configId)
+    .get();
+  const obsoleteRefs = existingRangeSnap.docs
+    .filter((snapshot) => {
+      const data = snapshot.data();
+      return (
+        data.startDate === config.startDate
+        && data.endDate === config.endDate
+        && !currentSnapshotIds.has(snapshot.id)
+      );
+    })
+    .map((snapshot) => snapshot.ref);
+  await commitSnapshotDeletes(obsoleteRefs);
+
   await saveFollowerObservations(configId, config, rows);
   await rewriteFollowerSheetFromSnapshots(configId, config, followerTab);
 
@@ -1570,7 +1790,7 @@ async function writeFollowerSheet(configId, config, rows) {
     lastFollowerSyncedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  return { appended, updated };
+  return { appended, updated, deleted: obsoleteRefs.length };
 }
 
 async function syncFollowerSheet(configId, config, preview = false) {
@@ -1790,6 +2010,121 @@ export const runSheetSync = onRequest({ cors: true, timeoutSeconds: 540, maxInst
     res.status(200).json(result);
   } catch (error) {
     jsonError(res, 500, error.message);
+  }
+});
+
+export const startYouTubeOAuth = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed. Use POST.');
+
+  try {
+    const user = await requireFirebaseUser(req);
+    const configId = req.body?.configId || DEFAULT_CONFIG_ID;
+    const { clientId, redirectUri } = await getYouTubeOAuthConfig(configId);
+    const state = crypto.randomBytes(24).toString('hex');
+    await db().collection('oauth_states').doc(state).set({
+      provider: 'youtube',
+      configId,
+      uid: user.uid,
+      userEmail: user.email || '',
+      createdAt: FieldValue.serverTimestamp(),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 10 * 60 * 1000)),
+    });
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: [
+        'https://www.googleapis.com/auth/youtube.readonly',
+        'https://www.googleapis.com/auth/yt-analytics.readonly',
+      ].join(' '),
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: 'true',
+      state,
+    });
+    res.status(200).json({
+      ok: true,
+      authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      redirectUri,
+    });
+  } catch (error) {
+    jsonError(res, 400, error.message);
+  }
+});
+
+export const oauthCallbackYouTube = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
+  setCors(res, 'GET, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'GET') return jsonError(res, 405, 'Method not allowed. Use GET.');
+
+  try {
+    const { code, state, error, error_description: errorDescription } = req.query || {};
+    if (error) throw new Error(errorDescription || error);
+    if (!code || !state) throw new Error('Missing YouTube code or state');
+
+    const stateRef = db().collection('oauth_states').doc(String(state));
+    const stateSnap = await stateRef.get();
+    if (!stateSnap.exists) throw new Error('Invalid or expired OAuth state');
+    const stateData = stateSnap.data();
+    if (stateData.provider !== 'youtube') throw new Error('OAuth state is not for YouTube');
+    if (stateData.expiresAt?.toDate?.() < new Date()) throw new Error('OAuth state expired');
+
+    const { clientId, clientSecret, redirectUri } = await getYouTubeOAuthConfig(stateData.configId);
+    const tokenData = await youtubeTokenRequest({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: String(code),
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+
+    const userCredentialId = `youtube_user_${sanitizeDocId(stateData.uid)}`;
+    await saveYouTubeTokenSecret(userCredentialId, tokenData);
+
+    const channels = await youtubeDataApiWithToken(tokenData.access_token, 'channels', {
+      part: 'snippet,statistics',
+      mine: 'true',
+      maxResults: '1',
+    });
+    const channel = channels?.items?.[0];
+
+    await db().collection('social_accounts').doc(userCredentialId).set({
+      platform: 'youtube_credential',
+      accountId: userCredentialId,
+      displayName: 'YouTube OAuth connection',
+      connectedBy: stateData.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    if (channel?.id) {
+      const accountId = `youtube_${sanitizeDocId(channel.id)}`;
+      await saveYouTubeTokenSecret(accountId, tokenData);
+      const channelPayload = {
+        name: channel?.snippet?.title || channel.id,
+        channelId: channel.id,
+        oauthAccountId: accountId,
+        connectedBy: stateData.uid,
+        connectedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      await db().collection('youtube_channels').doc(channel.id).set(channelPayload, { merge: true });
+      await db().collection('social_accounts').doc(accountId).set({
+        platform: 'youtube',
+        accountId: channel.id,
+        resolvedChannelId: channel.id,
+        displayName: channelPayload.name,
+        latestFollowerCount: nullableNumber(channel?.statistics?.subscriberCount),
+        connectedBy: stateData.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    await stateRef.delete();
+
+    res.status(200).send('<html><body><h2>YouTube connected.</h2><p>You can close this tab and return to the dashboard. If the editor channel is not listed, add it by Channel ID in Sheet Sync.</p></body></html>');
+  } catch (callbackError) {
+    res.status(400).send(`<html><body><h2>YouTube connection failed</h2><p>${callbackError.message}</p></body></html>`);
   }
 });
 
