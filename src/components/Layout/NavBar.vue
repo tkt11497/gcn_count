@@ -58,6 +58,15 @@
           </RouterLink>
           <RouterLink
             @click="showMobileNav = false"
+            to="/sheet-sync"
+            class="nav-link"
+            active-class="nav-active"
+          >
+            <span class="nav-icon">GS</span>
+            <span class="nav-text">Sheet Sync</span>
+          </RouterLink>
+          <RouterLink
+            @click="showMobileNav = false"
             to="/stats"
             class="nav-link"
             active-class="nav-active"

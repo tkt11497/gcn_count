@@ -11,6 +11,11 @@
       { "source": "/api/facebook/get-page-tokens", "function": "getPageTokens" },
       { "source": "/api/health", "function": "healthCheck" },
       { "source": "/api/youtube/live-counts", "function": "youtubeLiveCounts" },
+      { "source": "/api/sheet-sync/config", "function": "saveSyncConfig" },
+      { "source": "/api/sheet-sync/test", "function": "testSheetConnection" },
+      { "source": "/api/sheet-sync/run", "function": "runSheetSync" },
+      { "source": "/api/tiktok/start", "function": "startTikTokOAuth" },
+      { "source": "/api/tiktok/callback", "function": "oauthCallbackTikTok" },
       { "source": "**", "destination": "/index.html" }
     ]
   },

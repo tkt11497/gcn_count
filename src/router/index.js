@@ -8,6 +8,7 @@ import privacy_policy from '@/views/privacy_policy.vue'
 import EsportsLanding from '@/views/EsportsLanding.vue'
 import home from '@/views/home.vue'
 import ViewYouTubeConnect from '@/views/ViewYouTubeConnect.vue'
+import ViewSheetSync from '@/views/ViewSheetSync.vue'
 import ReactionTest from '@/views/ReactionTest.vue'
 import { useStoreAuth } from '@/stores/storeAuth'
 
@@ -67,6 +68,11 @@ const routes = [
     path: '/youtube-connect',
     name: 'youtube-connect',
     component: ViewYouTubeConnect
+  },
+  {
+    path: '/sheet-sync',
+    name: 'sheet-sync',
+    component: ViewSheetSync
   },
   {
     path: '/reaction-test',

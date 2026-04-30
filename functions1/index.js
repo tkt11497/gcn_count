@@ -3,6 +3,14 @@ import { initializeApp } from 'firebase-admin/app';
 import { defineString } from 'firebase-functions/params';
 import fetch from 'node-fetch';
 //import * as functions from "firebase-functions";
+export {
+  saveSyncConfig,
+  testSheetConnection,
+  runSheetSync,
+  startTikTokOAuth,
+  oauthCallbackTikTok,
+  scheduledSheetSync,
+} from './sheetSync.js';
 
 // Initialize Firebase Admin
 initializeApp();
