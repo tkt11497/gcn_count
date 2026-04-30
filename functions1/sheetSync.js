@@ -804,6 +804,84 @@ async function resolveYouTubeChannel(configId, channelIdOrHandle) {
   return data?.items?.[0]?.id || channelIdOrHandle;
 }
 
+async function getYouTubeChannelProfile(accessToken, channelIdOrHandle) {
+  const channelId = String(channelIdOrHandle);
+  const data = await youtubeDataApiWithToken(accessToken, 'channels', {
+    part: 'id,contentDetails',
+    id: channelId,
+  });
+  const item = data?.items?.[0] || {};
+  return {
+    channelId: item.id || channelId,
+    uploadsPlaylistId: item?.contentDetails?.relatedPlaylists?.uploads || '',
+  };
+}
+
+function parseYouTubeDurationSeconds(duration) {
+  if (!duration || typeof duration !== 'string') return null;
+  const match = duration.match(/^P(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!match) return null;
+  const hours = toNumber(match[1], 0);
+  const minutes = toNumber(match[2], 0);
+  const seconds = toNumber(match[3], 0);
+  return (hours * 60 * 60) + (minutes * 60) + seconds;
+}
+
+function classifyYouTubeVideo(video) {
+  if (video?.liveStreamingDetails) {
+    return { type: 'Live', link: `https://www.youtube.com/watch?v=${video.id}` };
+  }
+  const durationSeconds = parseYouTubeDurationSeconds(video?.contentDetails?.duration);
+  if (durationSeconds != null && durationSeconds <= 180) {
+    return { type: 'Short Video', link: `https://www.youtube.com/shorts/${video.id}` };
+  }
+  return { type: 'Video', link: `https://www.youtube.com/watch?v=${video.id}` };
+}
+
+async function listYouTubeUploadVideoIds(accessToken, uploadsPlaylistId, sinceIso, untilIso) {
+  if (!uploadsPlaylistId) return [];
+
+  const sinceMs = new Date(sinceIso).getTime();
+  const untilMs = new Date(untilIso).getTime();
+  const videoIds = [];
+  const seen = new Set();
+  let pageToken = '';
+  let keepGoing = true;
+
+  while (keepGoing) {
+    const data = await youtubeDataApiWithToken(accessToken, 'playlistItems', {
+      part: 'contentDetails,snippet',
+      playlistId: uploadsPlaylistId,
+      maxResults: '50',
+      ...(pageToken ? { pageToken } : {}),
+    });
+
+    const items = data?.items || [];
+    if (!items.length) break;
+
+    for (const item of items) {
+      const videoId = item?.contentDetails?.videoId;
+      const publishedAt = item?.contentDetails?.videoPublishedAt || item?.snippet?.publishedAt;
+      const publishedMs = new Date(publishedAt || '').getTime();
+
+      if (!videoId || !Number.isFinite(publishedMs)) continue;
+      if (publishedMs > untilMs) continue;
+      if (publishedMs < sinceMs) {
+        keepGoing = false;
+        break;
+      }
+      if (seen.has(videoId)) continue;
+      seen.add(videoId);
+      videoIds.push(videoId);
+    }
+
+    pageToken = data?.nextPageToken || '';
+    if (!pageToken) break;
+  }
+
+  return videoIds;
+}
+
 async function getYouTubeOAuthConfig(configId) {
   const [clientId, clientSecret, savedRedirectUri] = await Promise.all([
     getSecretValue(configId, 'googleOAuthClientId', ['GOOGLE_OAUTH_CLIENT_ID', 'YOUTUBE_CLIENT_ID']),
@@ -984,64 +1062,66 @@ async function discoverYouTubeRows(configId, config) {
       const actualChannelId = await resolveYouTubeChannel(configId, channel.id);
       const oauthAccountId = channel.oauthAccountId || `youtube_${sanitizeDocId(actualChannelId)}`;
       const accessToken = await getYouTubeAccessToken(configId, oauthAccountId);
+      const channelProfile = await getYouTubeChannelProfile(accessToken, actualChannelId);
       await db().collection('social_accounts').doc(`youtube_${sanitizeDocId(channel.id)}`).set({
         platform: 'youtube',
         accountId: channel.id,
-        resolvedChannelId: actualChannelId,
+        resolvedChannelId: channelProfile.channelId,
         oauthAccountId,
         displayName: channel.name || channel.id,
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      const search = await youtubeDataApiWithToken(accessToken, 'search', {
-        part: 'id,snippet',
-        channelId: actualChannelId,
-        type: 'video',
-        order: 'date',
-        maxResults: '20',
-        publishedAfter: sinceIso,
-        publishedBefore: untilIso,
-      });
-      const videoIds = (search?.items || []).map((item) => item?.id?.videoId).filter(Boolean);
+      const videoIds = await listYouTubeUploadVideoIds(
+        accessToken,
+        channelProfile.uploadsPlaylistId,
+        sinceIso,
+        untilIso,
+      );
       if (!videoIds.length) continue;
 
-      const [videos, metricMap] = await Promise.all([
-        youtubeDataApiWithToken(accessToken, 'videos', {
-          part: 'snippet,statistics,liveStreamingDetails',
-          id: videoIds.join(','),
-        }),
-        queryYouTubeVideoMetrics(accessToken, actualChannelId, videoIds, config),
+      const [metricMap, videoGroups] = await Promise.all([
+        queryYouTubeVideoMetrics(accessToken, channelProfile.channelId, videoIds, config),
+        Promise.all(Array.from({ length: Math.ceil(videoIds.length / 50) }, (_, groupIndex) => {
+          const chunkIds = videoIds.slice(groupIndex * 50, groupIndex * 50 + 50);
+          return youtubeDataApiWithToken(accessToken, 'videos', {
+            part: 'snippet,statistics,liveStreamingDetails,contentDetails',
+            id: chunkIds.join(','),
+          });
+        })),
       ]);
 
-      for (const video of videos?.items || []) {
-        const stats = video.statistics || {};
-        const analyticsMetrics = metricMap.get(video.id) || {};
-        const views = analyticsMetrics.views ?? nullableNumber(stats.viewCount);
-        const interactions = analyticsMetrics.interactions
-          ?? (toNumber(stats.likeCount) + toNumber(stats.commentCount));
-        const type = video.liveStreamingDetails ? 'Live' : 'Video';
-        const createdAt = video?.snippet?.publishedAt || new Date().toISOString();
-        const link = `https://www.youtube.com/watch?v=${video.id}`;
+      for (const group of videoGroups) {
+        for (const video of group?.items || []) {
+          const stats = video.statistics || {};
+          const analyticsMetrics = metricMap.get(video.id) || {};
+          const impressions = nullableNumber(analyticsMetrics.impressions);
+          const views = analyticsMetrics.views ?? nullableNumber(stats.viewCount);
+          const interactions = analyticsMetrics.interactions
+            ?? (toNumber(stats.likeCount) + toNumber(stats.commentCount));
+          const createdAt = video?.snippet?.publishedAt || new Date().toISOString();
+          const { type, link } = classifyYouTubeVideo(video);
 
-        rows.push({
-          key: `youtube:${video.id}`,
-          platform: 'YouTube',
-          contentId: video.id,
-          createdAt,
-          link,
-          row: [
-            formatSheetDate(createdAt, config.timezone),
-            video?.snippet?.title || video.id,
-            'YouTube',
-            type,
+          rows.push({
+            key: `youtube:${video.id}`,
+            platform: 'YouTube',
+            contentId: video.id,
+            createdAt,
             link,
-            numberOrDash(analyticsMetrics.impressions),
-            numberOrDash(views),
-            numberOrDash(interactions),
-            numberOrDash(views),
-          ],
-          metrics: { views, interactions, impressions: analyticsMetrics.impressions },
-        });
+            row: [
+              formatSheetDate(createdAt, config.timezone),
+              video?.snippet?.title || video.id,
+              'YouTube',
+              type,
+              link,
+              numberOrDash(impressions),
+              numberOrDash(views),
+              numberOrDash(interactions),
+              numberOrDash(views),
+            ],
+            metrics: { views, interactions, impressions },
+          });
+        }
       }
     } catch (error) {
       errors.push({ platform: 'youtube', accountId: channel.id, message: error.message });
