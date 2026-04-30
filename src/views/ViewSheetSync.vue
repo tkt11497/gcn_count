@@ -139,7 +139,7 @@
 
         <label>
           TikTok redirect URI
-          <input v-model.trim="secrets.tiktokRedirectUri" type="text" placeholder="https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok" />
+          <input v-model.trim="secrets.tiktokRedirectUri" type="text" :placeholder="TIKTOK_REDIRECT_URI" />
         </label>
 
         <p class="hint">
@@ -273,9 +273,10 @@
               <th>Platform</th>
               <th>Account</th>
               <th>Account ID</th>
-              <th>Followers Before</th>
-              <th>Followers Now</th>
+              <th>Start Followers</th>
+              <th>End Followers</th>
               <th>Growth</th>
+              <th>Current Followers</th>
             </tr>
           </thead>
           <tbody>
@@ -329,6 +330,7 @@ import {
 
 const CONFIG_ID = 'default'
 const CLOUD_FUNCTION_BASE_URL = 'https://us-central1-gcc-live-count.cloudfunctions.net'
+const TIKTOK_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackTikTok`
 const FUNCTION_ENDPOINTS = {
   saveConfig: `${CLOUD_FUNCTION_BASE_URL}/saveSyncConfig`,
   testSheet: `${CLOUD_FUNCTION_BASE_URL}/testSheetConnection`,
@@ -385,7 +387,7 @@ const secrets = reactive({
   youtubeApiKey: '',
   tiktokClientKey: '',
   tiktokClientSecret: '',
-  tiktokRedirectUri: ''
+  tiktokRedirectUri: TIKTOK_REDIRECT_URI
 })
 
 const latestRun = computed(() => runs.value[0] || null)
@@ -563,7 +565,11 @@ async function previewSync() {
   previewRows.value = []
   followerPreviewRows.value = []
   try {
-    const result = await postJson(FUNCTION_ENDPOINTS.runSync, { configId: CONFIG_ID, preview: true })
+    const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
+      configId: CONFIG_ID,
+      preview: true,
+      config: form
+    })
     previewRows.value = result.previewRows || []
     followerPreviewRows.value = result.followerPreviewRows || []
     setMessage(`Preview complete: ${result.discovered || 0} content rows discovered, ${followerPreviewRows.value.length} follower rows ready.`)
@@ -579,7 +585,10 @@ async function runSync() {
   busy.value = true
   setMessage('')
   try {
-    const result = await postJson(FUNCTION_ENDPOINTS.runSync, { configId: CONFIG_ID })
+    const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
+      configId: CONFIG_ID,
+      config: form
+    })
     const followerRows = (result.followerRowsAppended || 0) + (result.followerRowsUpdated || 0)
     setMessage(`Sync complete: ${result.rowsAppended || 0} appended, ${result.rowsUpdated || 0} updated, ${followerRows} follower rows saved.`)
     previewRows.value = []
@@ -598,7 +607,7 @@ async function connectTikTok() {
   try {
     const result = await postJson(FUNCTION_ENDPOINTS.startTikTok, { configId: CONFIG_ID })
     window.open(result.authUrl, '_blank', 'noopener,noreferrer')
-    setMessage('TikTok authorization opened in a new tab.')
+    setMessage(`TikTok authorization opened. Redirect URI: ${result.redirectUri || TIKTOK_REDIRECT_URI}`)
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {

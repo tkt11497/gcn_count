@@ -8,6 +8,7 @@ import fetch from 'node-fetch';
 
 const DEFAULT_CONFIG_ID = 'default';
 const DEFAULT_TIMEZONE = 'Asia/Rangoon';
+const DEFAULT_TIKTOK_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok';
 const SHEET_HEADERS = [
   'Date',
   'Content',
@@ -24,9 +25,10 @@ const FOLLOWER_HEADERS = [
   'Platform',
   'Account',
   'Account ID',
-  'Followers Before',
-  'Followers Now',
+  'Start Followers',
+  'End Followers',
   'Growth',
+  'Current Followers',
 ];
 
 function db() {
@@ -59,6 +61,7 @@ function numberOrDash(value) {
 }
 
 function nullableNumber(value) {
+  if (value == null || value === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
@@ -119,6 +122,38 @@ function defaultStartDate() {
 
 function defaultEndDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function localDateString(value = new Date(), timezone = DEFAULT_TIMEZONE) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone || DEFAULT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
+function shiftIsoDate(dateValue, days) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function timestampToLocalDate(value, timezone = DEFAULT_TIMEZONE) {
+  if (!value) return '';
+  if (typeof value.toDate === 'function') return localDateString(value.toDate(), timezone);
+  return localDateString(value, timezone);
+}
+
+function isCurrentLocalDate(date, timezone = DEFAULT_TIMEZONE) {
+  return String(date || '') === localDateString(new Date(), timezone);
 }
 
 function getSyncWindow(config) {
@@ -424,10 +459,10 @@ async function ensureFollowerSheetHeaders(configId, config) {
   const missing = FOLLOWER_HEADERS.some((header, index) => existing[index] !== header);
   if (missing) {
     await sheetsBatchClear(configId, config, [rangeForTab(followerTab, 'A:Z')]);
-    await sheetsFetch(configId, followerConfig, 'PUT', `A${row}:G${row}`, { values: [FOLLOWER_HEADERS] });
+    await sheetsFetch(configId, followerConfig, 'PUT', `A${row}:H${row}`, { values: [FOLLOWER_HEADERS] });
   }
 
-  await sheetsBatchClear(configId, config, [rangeForTab(followerTab, 'H:Z')]);
+  await sheetsBatchClear(configId, config, [rangeForTab(followerTab, 'I:Z')]);
 }
 
 async function writeSheetRowsAt(configId, config, startRow, rows) {
@@ -818,7 +853,7 @@ async function discoverYouTubeRows(configId, config) {
 }
 
 async function getTikTokClientConfig(configId) {
-  const [clientKey, clientSecret, redirectUri] = await Promise.all([
+  const [clientKey, clientSecret, savedRedirectUri] = await Promise.all([
     getSecretValue(configId, 'tiktokClientKey', ['TIKTOK_CLIENT_KEY']),
     getSecretValue(configId, 'tiktokClientSecret', ['TIKTOK_CLIENT_SECRET']),
     getSecretValue(configId, 'tiktokRedirectUri', ['TIKTOK_REDIRECT_URI']),
@@ -826,6 +861,10 @@ async function getTikTokClientConfig(configId) {
   if (!clientKey || !clientSecret) {
     throw new Error('TikTok client key/secret are not configured');
   }
+  const trimmedRedirectUri = String(savedRedirectUri || '').trim();
+  const redirectUri = trimmedRedirectUri === DEFAULT_TIKTOK_REDIRECT_URI
+    ? trimmedRedirectUri
+    : DEFAULT_TIKTOK_REDIRECT_URI;
   return { clientKey, clientSecret, redirectUri };
 }
 
@@ -983,6 +1022,37 @@ function followerAccountKey(platform, accountId) {
   return `${platform}:${accountId}`;
 }
 
+function facebookInsightFollowersForDate(data, targetDate, timezone = DEFAULT_TIMEZONE) {
+  const values = data?.data?.[0]?.values || [];
+  const datedValues = values
+    .map((item) => {
+      const date = localDateString(item?.end_time, timezone);
+      const followers = insightValueToNumber(item?.value);
+      return { date, followers };
+    })
+    .filter((item) => item.date && item.followers !== null);
+
+  const onOrBefore = datedValues
+    .filter((item) => item.date <= targetDate)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  if (onOrBefore) return onOrBefore;
+
+  return datedValues
+    .filter((item) => item.date > targetDate)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] || null;
+}
+
+async function getFacebookFollowerCountForDate(pageId, accessToken, targetDate, timezone) {
+  if (!targetDate) return null;
+  const data = await fbGet(`${pageId}/insights`, accessToken, {
+    metric: 'page_follows',
+    period: 'day',
+    since: shiftIsoDate(targetDate, -7),
+    until: shiftIsoDate(targetDate, 2),
+  });
+  return facebookInsightFollowersForDate(data, targetDate, timezone);
+}
+
 async function getFacebookFollowerAccounts(config) {
   if (!config.enabledPlatforms?.facebook) return { accounts: [], errors: [] };
 
@@ -1001,6 +1071,21 @@ async function getFacebookFollowerAccounts(config) {
         fields: 'name,followers_count,fan_count',
       });
       const followers = nullableNumber(data?.followers_count) ?? nullableNumber(data?.fan_count);
+      let startInsight = null;
+      let endInsight = null;
+      try {
+        [startInsight, endInsight] = await Promise.all([
+          getFacebookFollowerCountForDate(page.id, page.access_token, config.startDate, config.timezone),
+          getFacebookFollowerCountForDate(page.id, page.access_token, config.endDate, config.timezone),
+        ]);
+      } catch (insightError) {
+        errors.push({
+          platform: 'facebook',
+          accountId: page.id,
+          message: `Facebook follower insights unavailable: ${insightError.message}`,
+        });
+      }
+
       if (followers !== null) {
         accounts.push({
           platform: 'Facebook',
@@ -1008,6 +1093,10 @@ async function getFacebookFollowerAccounts(config) {
           accountId: String(page.id),
           accountName: data?.name || page.name || page.id,
           followers,
+          startFollowers: startInsight?.followers ?? null,
+          startFollowersSourceDate: startInsight?.date || '',
+          endFollowers: endInsight?.followers ?? null,
+          endFollowersSourceDate: endInsight?.date || '',
         });
       }
     } catch (error) {
@@ -1164,23 +1253,159 @@ function followerGrowth(now, before) {
   return Number(now) - Number(before);
 }
 
-function followerRows(config, accounts, previousAccounts) {
+function legacyFollowerCount(value, sourceDate = '') {
+  const count = nullableNumber(value);
+  if (count === 0 && !sourceDate) return null;
+  return count;
+}
+
+function observationDocId(configId, key, date) {
+  return sanitizeDocId(`${configId}:${date}:${key}`);
+}
+
+function recordObservationFromRange(record) {
+  const followers = nullableNumber(record.endFollowers);
+  if (followers === null || !record.endDate) return null;
+  if (record.endFollowersSourceDate && record.endFollowersSourceDate > record.endDate) return null;
+  if (!record.endFollowersSourceDate && record.lastSyncedDate && record.lastSyncedDate > record.endDate) return null;
+  return {
+    key: record.key,
+    date: record.endDate,
+    followers,
+  };
+}
+
+async function saveFollowerObservations(configId, config, accounts) {
+  const observationDate = localDateString(new Date(), config.timezone);
+  const writes = accounts.map((account) => {
+    const key = followerAccountKey(account.platformKey, account.accountId);
+    const snapshotRef = db().collection('follower_observations')
+      .doc(observationDocId(configId, key, observationDate));
+    return {
+      snapshotRef,
+      payload: {
+        configId,
+        key,
+        observationDate,
+        platform: account.platform,
+        platformKey: account.platformKey,
+        accountId: account.accountId,
+        accountName: account.accountName,
+        followers: account.followers,
+        currentFollowers: account.followers,
+        observedOnDate: observationDate,
+        observedAt: FieldValue.serverTimestamp(),
+      },
+    };
+  });
+  await commitSnapshotWrites(writes);
+}
+
+async function getFollowerObservationRecords(configId, accountKeys, config = {}) {
+  const snap = await db().collection('follower_observations')
+    .where('configId', '==', configId)
+    .get();
+  const observations = snap.docs
+    .map((snapshot) => {
+      const data = snapshot.data();
+      const date = data.observationDate || data.observedOnDate || '';
+      const observedOnDate = data.observedOnDate || timestampToLocalDate(data.observedAt, config.timezone);
+      return {
+        key: data.key || followerAccountKey(data.platformKey, data.accountId),
+        date,
+        observedOnDate,
+        followers: nullableNumber(data.followers ?? data.currentFollowers),
+      };
+    })
+    .filter((item) => (
+      accountKeys.has(item.key)
+      && item.date
+      && (!item.observedOnDate || item.observedOnDate <= item.date)
+      && item.followers !== null
+    ));
+
+  const rangeSnap = await db().collection('follower_snapshots')
+    .where('configId', '==', configId)
+    .get();
+  const rangeObservations = rangeSnap.docs
+    .map((snapshot) => recordObservationFromRange(followerSnapshotToRecord(snapshot)))
+    .filter((item) => (
+      item
+      && accountKeys.has(item.key)
+      && item.date
+      && item.followers !== null
+    ));
+
+  return [...observations, ...rangeObservations];
+}
+
+function closestObservationOnOrBefore(records, key, date) {
+  return records
+    .filter((item) => item.key === key && item.date && item.date <= date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null;
+}
+
+async function followerDateValues(configId, config, accounts) {
+  const accountKeys = new Set(accounts.map((account) => (
+    followerAccountKey(account.platformKey, account.accountId)
+  )));
+  const records = await getFollowerObservationRecords(configId, accountKeys, config);
+  const result = {};
+  for (const account of accounts) {
+    const key = followerAccountKey(account.platformKey, account.accountId);
+    const startObservation = closestObservationOnOrBefore(records, key, config.startDate);
+    const endObservation = closestObservationOnOrBefore(records, key, config.endDate);
+    const currentFollowers = nullableNumber(account.followers);
+    const accountStartFollowers = nullableNumber(account.startFollowers);
+    const accountEndFollowers = nullableNumber(account.endFollowers);
+    const startIsCurrent = isCurrentLocalDate(config.startDate, config.timezone);
+    const endIsCurrent = isCurrentLocalDate(config.endDate, config.timezone);
+    result[key] = {
+      start: accountStartFollowers
+        ?? (startIsCurrent
+        ? currentFollowers
+        : startObservation?.followers ?? null),
+      startSourceDate: account.startFollowersSourceDate
+        || (startIsCurrent
+        ? localDateString(new Date(), config.timezone)
+        : startObservation?.date || ''),
+      end: accountEndFollowers
+        ?? (endIsCurrent
+        ? currentFollowers
+        : endObservation?.followers ?? null),
+      endSourceDate: account.endFollowersSourceDate
+        || (endIsCurrent
+        ? localDateString(new Date(), config.timezone)
+        : endObservation?.date || ''),
+    };
+  }
+  return result;
+}
+
+function followerRows(config, accounts, dateValues = {}) {
   const dateRange = formatFollowerDateRange(config);
   return accounts.map((account) => {
     const key = followerAccountKey(account.platformKey, account.accountId);
-    const before = nullableNumber(previousAccounts?.[key]);
+    const startFollowers = nullableNumber(dateValues?.[key]?.start);
+    const endFollowers = nullableNumber(dateValues?.[key]?.end);
     return {
       key,
       ...account,
       dateRange,
+      startFollowers,
+      endFollowers,
+      startFollowersSourceDate: dateValues?.[key]?.startSourceDate || '',
+      endFollowersSourceDate: dateValues?.[key]?.endSourceDate || '',
+      currentFollowers: account.followers,
       row: [
         dateRange,
         account.platform,
         account.accountName,
         account.accountId,
-        numberOrDash(before),
+        numberOrDash(startFollowers),
+        numberOrDash(endFollowers),
+        followerGrowth(endFollowers, startFollowers),
         numberOrDash(account.followers),
-        followerGrowth(account.followers, before),
       ],
     };
   });
@@ -1194,55 +1419,12 @@ function followerAccountsMap(rows) {
   );
 }
 
-function previousFollowerRecord(records, current) {
-  return records
-    .filter((item) => (
-      item.key === current.key
-      && item.endDate
-      && current.startDate
-      && item.endDate < current.startDate
-    ))
-    .sort((a, b) => String(b.endDate).localeCompare(String(a.endDate)))[0] || null;
-}
-
-async function previousFollowerAccounts(configId, config, accounts) {
-  const accountKeys = new Set(accounts.map((account) => (
-    followerAccountKey(account.platformKey, account.accountId)
-  )));
-  const snap = await db().collection('follower_snapshots')
-    .where('configId', '==', configId)
-    .get();
-  const records = snap.docs
-    .map((snapshot) => {
-      const data = snapshot.data();
-      const key = followerAccountKey(data.platformKey, data.accountId);
-      return {
-        key,
-        startDate: data.startDate || '',
-        endDate: data.endDate || '',
-        followers: nullableNumber(data.followers),
-      };
-    })
-    .filter((item) => accountKeys.has(item.key) && item.followers !== null);
-
-  const result = {};
-  for (const account of accounts) {
-    const key = followerAccountKey(account.platformKey, account.accountId);
-    const previous = previousFollowerRecord(records, {
-      key,
-      startDate: config.startDate,
-    });
-    if (previous?.followers !== null && previous?.followers !== undefined) {
-      result[key] = previous.followers;
-    }
-  }
-  return result;
-}
-
 function followerSnapshotToRecord(snapshot) {
   const data = snapshot.data();
   const platformKey = data.platformKey || String(data.platform || '').toLowerCase();
   const accountId = String(data.accountId || '');
+  const startFollowersSourceDate = data.startFollowersSourceDate || '';
+  const endFollowersSourceDate = data.endFollowersSourceDate || '';
   return {
     snapshotRef: snapshot.ref,
     key: followerAccountKey(platformKey, accountId),
@@ -1254,20 +1436,31 @@ function followerSnapshotToRecord(snapshot) {
     accountId,
     accountName: data.accountName || accountId,
     followers: nullableNumber(data.followers),
+    startFollowers: legacyFollowerCount(data.startFollowers, startFollowersSourceDate),
+    endFollowers: legacyFollowerCount(data.endFollowers, endFollowersSourceDate),
+    startFollowersSourceDate,
+    endFollowersSourceDate,
+    currentFollowers: nullableNumber(data.currentFollowers),
+    lastSyncedDate: timestampToLocalDate(data.lastSyncedAt, data.timezone || DEFAULT_TIMEZONE),
   };
 }
 
-function followerRecordRow(records, record) {
-  const previous = previousFollowerRecord(records, record);
-  const before = nullableNumber(previous?.followers);
+function followerRecordRow(observations, record) {
+  const startFollowers = nullableNumber(record.startFollowers)
+    ?? closestObservationOnOrBefore(observations, record.key, record.startDate)?.followers
+    ?? null;
+  const endFollowers = nullableNumber(record.endFollowers)
+    ?? closestObservationOnOrBefore(observations, record.key, record.endDate)?.followers
+    ?? null;
   return [
     record.dateRange,
     record.platform,
     record.accountName,
     record.accountId,
-    numberOrDash(before),
-    numberOrDash(record.followers),
-    followerGrowth(record.followers, before),
+    numberOrDash(startFollowers),
+    numberOrDash(endFollowers),
+    followerGrowth(endFollowers, startFollowers),
+    numberOrDash(record.currentFollowers ?? record.followers),
   ];
 }
 
@@ -1293,21 +1486,27 @@ async function rewriteFollowerSheetFromSnapshots(configId, config, followerTab) 
         || a.accountName.localeCompare(b.accountName)
         || a.accountId.localeCompare(b.accountId)
     ));
+  const accountKeys = new Set(records.map((record) => record.key));
+  const savedObservations = await getFollowerObservationRecords(configId, accountKeys, config);
+  const rangeObservations = records
+    .map(recordObservationFromRange)
+    .filter(Boolean);
+  const observations = [...savedObservations, ...rangeObservations];
 
-  const sheetValues = await sheetsFetch(configId, followerConfig, 'GET', 'A:G');
+  const sheetValues = await sheetsFetch(configId, followerConfig, 'GET', 'A:H');
   const clearEndRow = Math.max(
     sheetValues?.values?.length || 0,
     startRow + records.length + 25,
   );
 
   await sheetsBatchClear(configId, config, [
-    rangeForTab(followerTab, `A${startRow}:G${clearEndRow}`),
+    rangeForTab(followerTab, `A${startRow}:H${clearEndRow}`),
   ]);
 
-  const rows = records.map((record) => followerRecordRow(records, record));
+  const rows = records.map((record) => followerRecordRow(observations, record));
   if (rows.length) {
     await sheetsBatchUpdate(configId, followerConfig, [{
-      range: rangeForTab(followerTab, `A${startRow}:G${startRow + rows.length - 1}`),
+      range: rangeForTab(followerTab, `A${startRow}:H${startRow + rows.length - 1}`),
       values: rows,
     }]);
   }
@@ -1349,6 +1548,12 @@ async function writeFollowerSheet(configId, config, rows) {
         accountId: item.accountId,
         accountName: item.accountName,
         followers: item.followers,
+        startFollowers: item.startFollowers,
+        endFollowers: item.endFollowers,
+        startFollowersSourceDate: item.startFollowersSourceDate,
+        endFollowersSourceDate: item.endFollowersSourceDate,
+        currentFollowers: item.currentFollowers,
+        timezone: config.timezone,
         sheetTab: followerTab,
         row: item.row,
         lastSyncedAt: FieldValue.serverTimestamp(),
@@ -1357,6 +1562,7 @@ async function writeFollowerSheet(configId, config, rows) {
   }
 
   await commitSnapshotWrites(snapshotWrites);
+  await saveFollowerObservations(configId, config, rows);
   await rewriteFollowerSheetFromSnapshots(configId, config, followerTab);
 
   await db().collection('sync_configs').doc(configId).set({
@@ -1369,8 +1575,8 @@ async function writeFollowerSheet(configId, config, rows) {
 
 async function syncFollowerSheet(configId, config, preview = false) {
   const discovered = await discoverFollowerAccounts(configId, config);
-  const previousAccounts = await previousFollowerAccounts(configId, config, discovered.accounts);
-  const rows = followerRows(config, discovered.accounts, previousAccounts);
+  const dateValues = await followerDateValues(configId, config, discovered.accounts);
+  const rows = followerRows(config, discovered.accounts, dateValues);
 
   if (preview) {
     return {
@@ -1436,10 +1642,15 @@ async function applyRowsToSheet(configId, config, normalizedRows, preview = fals
   };
 }
 
-async function runSync({ configId = DEFAULT_CONFIG_ID, preview = false, source = 'manual' } = {}) {
+async function runSync({
+  configId = DEFAULT_CONFIG_ID,
+  preview = false,
+  source = 'manual',
+  configOverride = null,
+} = {}) {
   const configSnap = await db().collection('sync_configs').doc(configId).get();
-  if (!configSnap.exists) throw new Error('Sync config has not been saved yet');
-  const config = normalizeConfig(configSnap.data());
+  if (!configSnap.exists && !configOverride) throw new Error('Sync config has not been saved yet');
+  const config = normalizeConfig(configOverride || configSnap.data());
   assertValidConfig(config);
 
   const runRef = db().collection('sync_runs').doc();
@@ -1558,11 +1769,23 @@ export const runSheetSync = onRequest({ cors: true, timeoutSeconds: 540, maxInst
   if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed. Use POST.');
 
   try {
-    await requireFirebaseUser(req);
+    const user = await requireFirebaseUser(req);
+    const configId = req.body?.configId || DEFAULT_CONFIG_ID;
+    let configOverride = null;
+    if (req.body?.config) {
+      configOverride = normalizeConfig(req.body.config);
+      assertValidConfig(configOverride);
+      await db().collection('sync_configs').doc(configId).set({
+        ...configOverride,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+      }, { merge: true });
+    }
     const result = await runSync({
-      configId: req.body?.configId || DEFAULT_CONFIG_ID,
+      configId,
       preview: Boolean(req.body?.preview),
       source: req.body?.preview ? 'preview' : 'manual',
+      configOverride,
     });
     res.status(200).json(result);
   } catch (error) {
@@ -1597,6 +1820,7 @@ export const startTikTokOAuth = onRequest({ cors: true, maxInstances: 10 }, asyn
     res.status(200).json({
       ok: true,
       authUrl: `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`,
+      redirectUri,
     });
   } catch (error) {
     jsonError(res, 400, error.message);
