@@ -5,7 +5,7 @@
         <p class="eyebrow">Social metrics automation</p>
         <h1>Google Sheet Sync</h1>
         <p class="subtitle">
-          Auto-discover recent Facebook, TikTok, and YouTube content, then append or update the reporting sheet.
+          Auto-discover recent Facebook, Instagram, TikTok, and YouTube content, then append or update the reporting sheet.
         </p>
       </div>
       <div class="status-panel">
@@ -88,12 +88,16 @@
             <span>Facebook</span>
           </label>
           <label class="switch-row">
-            <input v-model="form.enabledPlatforms.youtube" type="checkbox" />
-            <span>YouTube</span>
+            <input v-model="form.enabledPlatforms.instagram" type="checkbox" />
+            <span>Instagram</span>
           </label>
         </div>
 
-        <div class="platforms single-platform">
+        <div class="two-col">
+          <label class="switch-row">
+            <input v-model="form.enabledPlatforms.youtube" type="checkbox" />
+            <span>YouTube</span>
+          </label>
           <label class="switch-row">
             <input v-model="form.enabledPlatforms.tiktok" type="checkbox" />
             <span>TikTok</span>
@@ -135,6 +139,22 @@
         <label>
           YouTube redirect URI
           <input v-model.trim="secrets.youtubeRedirectUri" type="text" :placeholder="YOUTUBE_REDIRECT_URI" />
+        </label>
+
+        <div class="two-col">
+          <label>
+            Instagram client ID
+            <input v-model.trim="secrets.instagramClientId" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            Instagram client secret
+            <input v-model.trim="secrets.instagramClientSecret" type="password" autocomplete="new-password" />
+          </label>
+        </div>
+
+        <label>
+          Instagram redirect URI
+          <input v-model.trim="secrets.instagramRedirectUri" type="text" :placeholder="INSTAGRAM_REDIRECT_URI" />
         </label>
 
         <div class="two-col">
@@ -185,6 +205,23 @@
 
         <div class="account-column">
           <div class="account-heading">
+            <strong>Instagram Accounts</strong>
+            <button type="button" class="mini-btn" @click="toggleAllAccounts('instagram')">
+              {{ allInstagramSelected ? 'Clear' : 'All' }}
+            </button>
+          </div>
+          <label v-for="account in instagramAccounts" :key="account.id" class="account-option">
+            <input v-model="form.selectedAccounts.instagram" type="checkbox" :value="account.id" />
+            <span>
+              {{ account.displayName || account.username || account.accountId || account.id }}
+              <small>{{ account.accountId || account.id }}{{ account.pageName ? ` - ${account.pageName}` : '' }}</small>
+            </span>
+          </label>
+          <p v-if="!instagramAccounts.length" class="empty-note">Connect Instagram or run a preview to discover accounts linked to Facebook pages.</p>
+        </div>
+
+        <div class="account-column">
+          <div class="account-heading">
             <strong>YouTube Channels</strong>
             <button type="button" class="mini-btn" @click="toggleAllAccounts('youtube')">
               {{ allYouTubeSelected ? 'Clear' : 'All' }}
@@ -229,6 +266,7 @@
       <div class="actions">
         <button :disabled="busy" @click="previewSync">Preview Sync</button>
         <button :disabled="busy" @click="runSync">Run Now</button>
+        <button class="secondary" :disabled="busy" @click="connectInstagram">Connect Instagram</button>
         <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
         <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
       </div>
@@ -344,10 +382,12 @@ const CONFIG_ID = 'default'
 const CLOUD_FUNCTION_BASE_URL = 'https://us-central1-gcc-live-count.cloudfunctions.net'
 const TIKTOK_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackTikTok`
 const YOUTUBE_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackYouTube`
+const INSTAGRAM_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackInstagram`
 const FUNCTION_ENDPOINTS = {
   saveConfig: `${CLOUD_FUNCTION_BASE_URL}/saveSyncConfig`,
   testSheet: `${CLOUD_FUNCTION_BASE_URL}/testSheetConnection`,
   runSync: `${CLOUD_FUNCTION_BASE_URL}/runSheetSync`,
+  startInstagram: `${CLOUD_FUNCTION_BASE_URL}/startInstagramOAuth`,
   startYouTube: `${CLOUD_FUNCTION_BASE_URL}/startYouTubeOAuth`,
   startTikTok: `${CLOUD_FUNCTION_BASE_URL}/startTikTokOAuth`
 }
@@ -359,6 +399,7 @@ const previewRows = ref([])
 const followerPreviewRows = ref([])
 const runs = ref([])
 const facebookPages = ref([])
+const instagramAccounts = ref([])
 const youtubeChannels = ref([])
 const tiktokAccounts = ref([])
 
@@ -386,11 +427,13 @@ const form = reactive({
   endDate: defaultEndDate(),
   enabledPlatforms: {
     facebook: true,
+    instagram: true,
     youtube: true,
     tiktok: true
   },
   selectedAccounts: {
     facebook: [],
+    instagram: [],
     youtube: [],
     tiktok: []
   }
@@ -401,6 +444,9 @@ const secrets = reactive({
   googleOAuthClientId: '',
   googleOAuthClientSecret: '',
   youtubeRedirectUri: YOUTUBE_REDIRECT_URI,
+  instagramClientId: '',
+  instagramClientSecret: '',
+  instagramRedirectUri: INSTAGRAM_REDIRECT_URI,
   tiktokClientKey: '',
   tiktokClientSecret: '',
   tiktokRedirectUri: TIKTOK_REDIRECT_URI
@@ -414,10 +460,12 @@ const latestRunDetails = computed(() => {
 })
 const runningLabel = computed(() => busy.value ? 'Working' : 'Ready')
 const allFacebookSelected = computed(() => allSelected('facebook'))
+const allInstagramSelected = computed(() => allSelected('instagram'))
 const allYouTubeSelected = computed(() => allSelected('youtube'))
 const allTikTokSelected = computed(() => allSelected('tiktok'))
 const accountSummary = computed(() => {
   const total = form.selectedAccounts.facebook.length
+    + form.selectedAccounts.instagram.length
     + form.selectedAccounts.youtube.length
     + form.selectedAccounts.tiktok.length
   return total ? `${total} selected` : 'All connected accounts'
@@ -477,11 +525,13 @@ async function loadConfig() {
     endDate: data.endDate || defaultEndDate(),
     enabledPlatforms: {
       facebook: data.enabledPlatforms?.facebook !== false,
+      instagram: data.enabledPlatforms?.instagram !== false,
       youtube: data.enabledPlatforms?.youtube !== false,
       tiktok: data.enabledPlatforms?.tiktok !== false
     },
     selectedAccounts: {
       facebook: Array.isArray(data.selectedAccounts?.facebook) ? data.selectedAccounts.facebook : [],
+      instagram: Array.isArray(data.selectedAccounts?.instagram) ? data.selectedAccounts.instagram : [],
       youtube: Array.isArray(data.selectedAccounts?.youtube) ? data.selectedAccounts.youtube : [],
       tiktok: Array.isArray(data.selectedAccounts?.tiktok) ? data.selectedAccounts.tiktok : []
     }
@@ -494,8 +544,9 @@ function fallbackStartDate(lookbackDays = 14) {
 }
 
 async function loadAccounts() {
-  const [pagesSnap, channelsSnap, tiktokSnap] = await Promise.all([
+  const [pagesSnap, instagramSnap, channelsSnap, tiktokSnap] = await Promise.all([
     getDocs(collection(db, 'pages')),
+    getDocs(query(collection(db, 'social_accounts'), where('platform', '==', 'instagram'))),
     getDocs(collection(db, 'youtube_channels')),
     getDocs(query(collection(db, 'social_accounts'), where('platform', '==', 'tiktok')))
   ])
@@ -503,6 +554,10 @@ async function loadAccounts() {
   facebookPages.value = pagesSnap.docs
     .map((item) => ({ id: item.id, ...item.data() }))
     .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)))
+
+  instagramAccounts.value = instagramSnap.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .sort((a, b) => String(a.displayName || a.username || a.accountId || a.id).localeCompare(String(b.displayName || b.username || b.accountId || b.id)))
 
   youtubeChannels.value = channelsSnap.docs
     .map((item) => ({ id: item.id, ...item.data() }))
@@ -515,6 +570,7 @@ async function loadAccounts() {
 
 function accountIds(platform) {
   if (platform === 'facebook') return facebookPages.value.map((item) => item.id)
+  if (platform === 'instagram') return instagramAccounts.value.map((item) => item.id)
   if (platform === 'youtube') return youtubeChannels.value.map((item) => item.id)
   return tiktokAccounts.value.map((item) => item.id)
 }
@@ -589,7 +645,7 @@ async function previewSync() {
     previewRows.value = result.previewRows || []
     followerPreviewRows.value = result.followerPreviewRows || []
     setMessage(`Preview complete: ${result.discovered || 0} content rows discovered, ${followerPreviewRows.value.length} follower rows ready.`)
-    await loadRuns()
+    await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {
@@ -609,7 +665,7 @@ async function runSync() {
     setMessage(`Sync complete: ${result.rowsAppended || 0} appended, ${result.rowsUpdated || 0} updated, ${followerRows} follower rows saved.`)
     previewRows.value = []
     followerPreviewRows.value = []
-    await loadRuns()
+    await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {
@@ -624,6 +680,20 @@ async function connectTikTok() {
     const result = await postJson(FUNCTION_ENDPOINTS.startTikTok, { configId: CONFIG_ID })
     window.open(result.authUrl, '_blank', 'noopener,noreferrer')
     setMessage(`TikTok authorization opened. Redirect URI: ${result.redirectUri || TIKTOK_REDIRECT_URI}`)
+  } catch (error) {
+    setMessage(error.message, 'error')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function connectInstagram() {
+  busy.value = true
+  setMessage('')
+  try {
+    const result = await postJson(FUNCTION_ENDPOINTS.startInstagram, { configId: CONFIG_ID })
+    window.open(result.authUrl, '_blank', 'noopener,noreferrer')
+    setMessage(`Instagram authorization opened. Redirect URI: ${result.redirectUri || INSTAGRAM_REDIRECT_URI}`)
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {
@@ -824,34 +894,11 @@ textarea:focus {
   font-size: 0.95rem;
 }
 
-.switch-row input,
-.platforms input {
+.switch-row input {
   accent-color: #38bdf8;
   height: 18px;
   min-height: unset;
   width: 18px;
-}
-
-.platforms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 6px 0 18px;
-}
-
-.single-platform {
-  margin-top: -8px;
-}
-
-.platforms label {
-  align-items: center;
-  background: #0f1727;
-  border: 1px solid #34445f;
-  border-radius: 8px;
-  display: flex;
-  gap: 9px;
-  margin: 0;
-  padding: 10px 12px;
 }
 
 .actions {
@@ -892,7 +939,7 @@ button:disabled {
 .accounts-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .account-column {

@@ -49,17 +49,21 @@ const functionUrl = 'https://us-central1-gcc-live-count.cloudfunctions.net/excha
 
 ### 4. Google Sheet Social Metrics Sync
 - **Admin page:** `/sheet-sync`
-- **Purpose:** Discover recent Facebook, YouTube, and TikTok content and write rows to Google Sheets.
+- **Purpose:** Discover recent Facebook, Instagram, YouTube, and TikTok content and write rows to Google Sheets.
 - **Manual run endpoint:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/runSheetSync`
 - **Preview endpoint:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/runSheetSync` with `{ "preview": true }`
 - **Config endpoint:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/saveSyncConfig`
 - **Sheet test endpoint:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/testSheetConnection`
+- **Instagram OAuth:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/startInstagramOAuth`, callback at `https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackInstagram`
 - **TikTok OAuth:** `POST https://us-central1-gcc-live-count.cloudfunctions.net/startTikTokOAuth`, callback at `https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok`
 
 Required backend environment:
 ```
 GOOGLE_SERVICE_ACCOUNT_JSON={"client_email":"...","private_key":"..."}
 YT_API_KEY=...
+INSTAGRAM_CLIENT_ID=...
+INSTAGRAM_CLIENT_SECRET=...
+INSTAGRAM_REDIRECT_URI=https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackInstagram
 TIKTOK_CLIENT_KEY=...
 TIKTOK_CLIENT_SECRET=...
 TIKTOK_REDIRECT_URI=https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok
@@ -69,6 +73,8 @@ Notes:
 - Share the target Google Sheet with the `client_email` from the service account.
 - For this internal tool, credentials entered from `/sheet-sync` are stored server-side in Firestore for the sync functions to use.
 - The scheduled function runs every 15 minutes and only performs the sync once the configured local schedule time has been reached for that day.
+- Instagram sync supports either separately connected Instagram Business/Creator accounts or Instagram accounts linked to connected Facebook Pages.
+- For separate Instagram OAuth, use the Instagram app ID/secret from **Meta > Instagram > API setup with Instagram login**, not the Facebook Login app credentials.
 - TikTok requires approved `user.info.basic` and `video.list` scopes before owned-account video sync will return production data.
 
 Google service account setup:
