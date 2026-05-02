@@ -13,6 +13,10 @@ const DEFAULT_YOUTUBE_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfu
 const DEFAULT_INSTAGRAM_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackInstagram';
 const INSTAGRAM_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url,followers_count,media_count';
 const INSTAGRAM_BASIC_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url';
+const INSTAGRAM_DIRECT_SCOPES = [
+  'instagram_business_basic',
+  'instagram_business_manage_insights',
+];
 const SHEET_HEADERS = [
   'Date',
   'Content',
@@ -47,6 +51,15 @@ function setCors(res, methods = 'POST, OPTIONS') {
 
 function jsonError(res, status, error, details = {}) {
   res.status(status).json({ ok: false, error, ...details });
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 async function requireFirebaseUser(req) {
@@ -97,6 +110,7 @@ function apiErrorMessage(data, fallback) {
   return data?.error?.message
     || data?.error_description
     || data?.error_message
+    || data?.error_type
     || fallback;
 }
 
@@ -771,16 +785,23 @@ async function instagramOAuthTokenRequest(params) {
     body: new URLSearchParams(params),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) {
+  if (!response.ok || data?.error || data?.error_type || data?.error_message) {
     throw new Error(apiErrorMessage(data, `Instagram OAuth error ${response.status}`));
   }
-  return data;
+  const tokenData = Array.isArray(data?.data) ? data.data[0] || {} : data;
+  if (!tokenData?.access_token) {
+    throw new Error('Instagram OAuth did not return an access token');
+  }
+  return {
+    ...tokenData,
+    raw: data,
+  };
 }
 
 async function instagramTokenExchangeFetch(url, options, fallback) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) {
+  if (!response.ok || data?.error || data?.error_type || data?.error_message) {
     throw new Error(apiErrorMessage(data, fallback || `Instagram token exchange error ${response.status}`));
   }
   if (!data?.access_token) {
@@ -856,7 +877,7 @@ async function refreshInstagramLongLivedToken(accessToken) {
   });
   const response = await fetch(`https://graph.instagram.com/refresh_access_token?${query.toString()}`);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) {
+  if (!response.ok || data?.error || data?.error_type || data?.error_message) {
     throw new Error(apiErrorMessage(data, `Instagram token refresh error ${response.status}`));
   }
   return data;
@@ -889,6 +910,22 @@ function normalizeInstagramProfilePayload(data, fallbackId = '') {
     id,
     user_id: professionalId || id,
     appScopedId: appScopedId && appScopedId !== id ? appScopedId : '',
+  };
+}
+
+function fallbackInstagramProfile(userId, profileWarning = '') {
+  const id = String(userId || '').trim();
+  return {
+    id,
+    user_id: id,
+    username: '',
+    name: '',
+    account_type: '',
+    profile_picture_url: '',
+    followers_count: null,
+    media_count: null,
+    appScopedId: '',
+    profileWarning,
   };
 }
 
@@ -932,71 +969,6 @@ async function getInstagramProfile(instagramUserId, accessToken) {
   }
 }
 
-async function discoverInstagramLinkedAccounts(config, seen = new Set()) {
-  const accounts = [];
-  const errors = [];
-  const pagesSnap = await db().collection('pages').get();
-  const selectedAccountIds = new Set(config.selectedAccounts?.instagram || []);
-
-  for (const pageDoc of pagesSnap.docs) {
-    const page = { id: pageDoc.id, ...pageDoc.data() };
-    if (!page.access_token) continue;
-
-    try {
-      const data = await fbGet(page.id, page.access_token, {
-        fields: 'name,instagram_business_account{id,username,name,followers_count,media_count,profile_picture_url}',
-      });
-      const igAccount = data?.instagram_business_account;
-      if (!igAccount?.id || seen.has(String(igAccount.id))) continue;
-
-      const docId = instagramAccountDocId(igAccount.id);
-      if (!instagramAccountSelected(selectedAccountIds, {
-        id: docId,
-        accountId: igAccount.id,
-      })) {
-        continue;
-      }
-
-      seen.add(String(igAccount.id));
-      const displayName = igAccount.username || igAccount.name || igAccount.id;
-      const followers = nullableNumber(igAccount.followers_count);
-      const account = {
-        id: docId,
-        accountId: String(igAccount.id),
-        displayName,
-        username: igAccount.username || '',
-        name: igAccount.name || '',
-        pageId: String(page.id),
-        pageName: data?.name || page.name || page.id,
-        accessToken: page.access_token,
-        followers,
-        tokenSource: 'facebook',
-      };
-      accounts.push(account);
-      seen.add(account.accountId);
-
-      await db().collection('social_accounts').doc(docId).set({
-        platform: 'instagram',
-        accountId: account.accountId,
-        displayName,
-        username: account.username,
-        name: account.name,
-        pageId: account.pageId,
-        pageName: account.pageName,
-        tokenSource: 'facebook',
-        latestFollowerCount: followers,
-        mediaCount: nullableNumber(igAccount.media_count),
-        profilePictureUrl: igAccount.profile_picture_url || '',
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    } catch (error) {
-      errors.push({ platform: 'instagram', accountId: page.id, message: error.message });
-    }
-  }
-
-  return { accounts, errors };
-}
-
 async function discoverInstagramDirectAccounts(config, seen = new Set()) {
   const accounts = [];
   const errors = [];
@@ -1015,7 +987,8 @@ async function discoverInstagramDirectAccounts(config, seen = new Set()) {
 
     try {
       const accessToken = await getInstagramAccessToken(account.id);
-      const profile = await getInstagramProfile(account.accountId, accessToken);
+      const profile = await getInstagramProfile(account.accountId, accessToken)
+        .catch((error) => fallbackInstagramProfile(account.accountId || account.oauthUserId || account.id, error.message));
       const accountId = String(profile?.id || account.accountId || account.id);
       if (seen.has(accountId)) continue;
 
@@ -1070,12 +1043,7 @@ async function discoverInstagramDirectAccounts(config, seen = new Set()) {
 
 async function discoverInstagramAccounts(config) {
   const seen = new Set();
-  const direct = await discoverInstagramDirectAccounts(config, seen);
-  const linked = await discoverInstagramLinkedAccounts(config, seen);
-  return {
-    accounts: [...direct.accounts, ...linked.accounts],
-    errors: [...direct.errors, ...linked.errors],
-  };
+  return discoverInstagramDirectAccounts(config, seen);
 }
 
 function instagramContentType(media) {
@@ -1125,12 +1093,6 @@ function instagramAccountDebug(account) {
   });
 }
 
-async function instagramApiGet(path, token, tokenSource, params = {}) {
-  return tokenSource === 'instagram'
-    ? igDirectGet(path, token, params)
-    : fbGet(path, token, params);
-}
-
 function instagramPrimaryInsightMetricNames(media = null) {
   const contentType = media ? instagramContentType(media) : '';
   if (contentType === 'Stories') return ['reach', 'views', 'replies', 'shares', 'navigation'];
@@ -1163,7 +1125,7 @@ async function requestInstagramMediaPage(account, path, baseParams, fieldSet, de
     fieldSet: fieldSet.name,
     reason,
   });
-  const data = await instagramApiGet(path, account.accessToken, account.tokenSource, params);
+  const data = await igDirectGet(path, account.accessToken, params);
   pushInstagramDebug(debug, {
     stage: 'media_list_response',
     path,
@@ -1290,7 +1252,7 @@ function instagramNeedsMoreInsights(media, insights) {
   return !hasReach || !hasViews || !hasInteractions;
 }
 
-async function getInstagramInsightsForMedia(media, token, tokenSource, debug = [], existingInsights = {}) {
+async function getInstagramInsightsForMedia(media, token, debug = [], existingInsights = {}) {
   const primaryMetricNames = instagramPrimaryInsightMetricNames(media);
   const metricNames = instagramInsightMetricNames(media);
   const path = `${media.id}/insights`;
@@ -1311,7 +1273,7 @@ async function getInstagramInsightsForMedia(media, token, tokenSource, debug = [
       path,
       params: { metric: primaryMetricNames.join(',') },
     });
-    const data = await instagramApiGet(path, token, tokenSource, {
+    const data = await igDirectGet(path, token, {
       metric: primaryMetricNames.join(','),
     });
     pushInstagramDebug(debug, {
@@ -1339,7 +1301,7 @@ async function getInstagramInsightsForMedia(media, token, tokenSource, debug = [
           params: { metric: metricName },
           reason: 'single metric fallback',
         });
-        const data = await instagramApiGet(path, token, tokenSource, {
+        const data = await igDirectGet(path, token, {
           metric: metricName,
         });
         pushInstagramDebug(debug, {
@@ -1373,7 +1335,7 @@ async function getInstagramInsightsForMedia(media, token, tokenSource, debug = [
           params: { metric: metricName },
           reason: 'fill missing metric after batch response',
         });
-        const data = await instagramApiGet(path, token, tokenSource, {
+        const data = await igDirectGet(path, token, {
           metric: metricName,
         });
         pushInstagramDebug(debug, {
@@ -1528,7 +1490,6 @@ async function discoverInstagramRows(config) {
           const insights = await getInstagramInsightsForMedia(
             media,
             account.accessToken,
-            account.tokenSource,
             debug,
             expandedInsights,
           );
@@ -2829,19 +2790,15 @@ export const startInstagramOAuth = onRequest({ cors: true, maxInstances: 10 }, a
       redirect_uri: redirectUri,
       response_type: 'code',
       force_reauth: 'true',
-      scope: [
-        'instagram_business_basic',
-        'instagram_business_manage_messages',
-        'instagram_business_manage_comments',
-        'instagram_business_content_publish',
-        'instagram_business_manage_insights',
-      ].join(','),
+      enable_fb_login: 'false',
+      scope: INSTAGRAM_DIRECT_SCOPES.join(','),
       state,
     });
     res.status(200).json({
       ok: true,
       authUrl: `https://www.instagram.com/oauth/authorize?${params.toString()}`,
       redirectUri,
+      scopes: INSTAGRAM_DIRECT_SCOPES,
     });
   } catch (error) {
     jsonError(res, 400, error.message);
@@ -2874,7 +2831,6 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
       redirect_uri: redirectUri,
     });
     const oauthUserId = String(shortLivedToken.user_id || '').trim();
-    let profile = await getInstagramProfile(oauthUserId, shortLivedToken.access_token);
     const usableToken = await getUsableInstagramToken(shortLivedToken.access_token, clientSecret)
       .catch((error) => ({
         access_token: shortLivedToken.access_token,
@@ -2883,10 +2839,8 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
         isLongLived: false,
         exchangeWarning: error.message,
       }));
-    if (usableToken.isLongLived) {
-      profile = await getInstagramProfile(oauthUserId, usableToken.access_token)
-        .catch(() => profile);
-    }
+    const profile = await getInstagramProfile(oauthUserId, usableToken.access_token)
+      .catch((profileError) => fallbackInstagramProfile(oauthUserId, profileError.message));
     const instagramUserId = String(profile?.user_id || profile?.id || oauthUserId || '').trim();
     if (!instagramUserId) throw new Error('Instagram account ID was not returned');
 
@@ -2896,6 +2850,8 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
       user_id: instagramUserId,
       oauth_user_id: oauthUserId,
       app_scoped_user_id: profile?.appScopedId || '',
+      requested_scopes: INSTAGRAM_DIRECT_SCOPES.join(','),
+      granted_scopes: shortLivedToken.permissions || shortLivedToken.scope || '',
     });
 
     const displayName = profile?.username || profile?.name || instagramUserId;
@@ -2913,6 +2869,8 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
       tokenType: usableToken.isLongLived ? 'long_lived' : 'short_lived',
       tokenExchangeWarning: usableToken.exchangeWarning || '',
       profileWarning: profile?.profileWarning || '',
+      requestedScopes: INSTAGRAM_DIRECT_SCOPES,
+      grantedScopes: shortLivedToken.permissions || shortLivedToken.scope || '',
       latestFollowerCount: nullableNumber(profile?.followers_count),
       mediaCount: nullableNumber(profile?.media_count),
       profilePictureUrl: profile?.profile_picture_url || '',
@@ -2922,12 +2880,16 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
     }, { merge: true });
     await stateRef.delete();
 
-    const warning = usableToken.isLongLived
-      ? ''
-      : '<p>Profile test call succeeded, but Meta did not issue a long-lived token yet. Request advanced access in Meta, then reconnect Instagram for scheduled sync.</p>';
+    const warnings = [
+      profile?.profileWarning ? `Profile lookup warning: ${profile.profileWarning}` : '',
+      usableToken.exchangeWarning ? `Token exchange warning: ${usableToken.exchangeWarning}` : '',
+    ].filter(Boolean);
+    const warning = warnings.length
+      ? `<p>Instagram token was saved, but Meta returned warnings:</p><ul>${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p>You can close this tab and run Preview Sync to see media/insights debug output.</p>`
+      : '';
     res.status(200).send(`<html><body><h2>Instagram connected.</h2>${warning}<p>You can close this tab and return to the dashboard.</p></body></html>`);
   } catch (callbackError) {
-    res.status(400).send(`<html><body><h2>Instagram connection failed</h2><p>${callbackError.message}</p></body></html>`);
+    res.status(400).send(`<html><body><h2>Instagram connection failed</h2><p>${escapeHtml(callbackError.message)}</p></body></html>`);
   }
 });
 

@@ -214,10 +214,10 @@
             <input v-model="form.selectedAccounts.instagram" type="checkbox" :value="account.id" />
             <span>
               {{ account.displayName || account.username || account.accountId || account.id }}
-              <small>{{ account.accountId || account.id }}{{ account.pageName ? ` - ${account.pageName}` : '' }}</small>
+              <small>{{ account.accountId || account.id }}</small>
             </span>
           </label>
-          <p v-if="!instagramAccounts.length" class="empty-note">Connect Instagram or run a preview to discover accounts linked to Facebook pages.</p>
+          <p v-if="!instagramAccounts.length" class="empty-note">Connect an Instagram Business or Creator account.</p>
         </div>
 
         <div class="account-column">
@@ -575,6 +575,7 @@ async function loadAccounts() {
 
   instagramAccounts.value = instagramSnap.docs
     .map((item) => ({ id: item.id, ...item.data() }))
+    .filter((item) => item.tokenSource === 'instagram' || item.authSource === 'instagram')
     .sort((a, b) => String(a.displayName || a.username || a.accountId || a.id).localeCompare(String(b.displayName || b.username || b.accountId || b.id)))
 
   youtubeChannels.value = channelsSnap.docs
