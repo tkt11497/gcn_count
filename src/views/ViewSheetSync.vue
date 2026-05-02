@@ -273,6 +273,14 @@
       <p v-if="message" class="message" :class="{ error: messageType === 'error' }">{{ message }}</p>
     </section>
 
+    <section v-if="instagramDebugRows.length" class="sync-panel debug-panel">
+      <div class="panel-title">
+        <h2>Instagram Debug</h2>
+        <span>{{ instagramDebugRows.length }} events</span>
+      </div>
+      <pre>{{ instagramDebugText }}</pre>
+    </section>
+
     <section v-if="previewRows.length" class="sync-panel">
       <div class="panel-title">
         <h2>Preview Rows</h2>
@@ -397,6 +405,7 @@ const message = ref('')
 const messageType = ref('info')
 const previewRows = ref([])
 const followerPreviewRows = ref([])
+const instagramDebugRows = ref([])
 const runs = ref([])
 const facebookPages = ref([])
 const instagramAccounts = ref([])
@@ -463,6 +472,7 @@ const allFacebookSelected = computed(() => allSelected('facebook'))
 const allInstagramSelected = computed(() => allSelected('instagram'))
 const allYouTubeSelected = computed(() => allSelected('youtube'))
 const allTikTokSelected = computed(() => allSelected('tiktok'))
+const instagramDebugText = computed(() => JSON.stringify(instagramDebugRows.value, null, 2))
 const accountSummary = computed(() => {
   const total = form.selectedAccounts.facebook.length
     + form.selectedAccounts.instagram.length
@@ -488,6 +498,14 @@ async function authHeaders() {
 function setMessage(text, type = 'info') {
   message.value = text
   messageType.value = type
+}
+
+function syncErrorText(errors = []) {
+  if (!Array.isArray(errors) || !errors.length) return ''
+  return errors
+    .slice(0, 3)
+    .map((error) => `${error.platform || 'sync'}: ${error.message || error}`)
+    .join(' | ')
 }
 
 function cleanSecretsPayload() {
@@ -636,6 +654,7 @@ async function previewSync() {
   setMessage('')
   previewRows.value = []
   followerPreviewRows.value = []
+  instagramDebugRows.value = []
   try {
     const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
       configId: CONFIG_ID,
@@ -644,7 +663,9 @@ async function previewSync() {
     })
     previewRows.value = result.previewRows || []
     followerPreviewRows.value = result.followerPreviewRows || []
-    setMessage(`Preview complete: ${result.discovered || 0} content rows discovered, ${followerPreviewRows.value.length} follower rows ready.`)
+    instagramDebugRows.value = result.instagramDebug || []
+    const errors = syncErrorText(result.errors)
+    setMessage(`Preview complete: ${result.discovered || 0} content rows discovered, ${followerPreviewRows.value.length} follower rows ready.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
     await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
@@ -656,13 +677,16 @@ async function previewSync() {
 async function runSync() {
   busy.value = true
   setMessage('')
+  instagramDebugRows.value = []
   try {
     const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
       configId: CONFIG_ID,
       config: form
     })
     const followerRows = (result.followerRowsAppended || 0) + (result.followerRowsUpdated || 0)
-    setMessage(`Sync complete: ${result.rowsAppended || 0} appended, ${result.rowsUpdated || 0} updated, ${followerRows} follower rows saved.`)
+    instagramDebugRows.value = result.instagramDebug || []
+    const errors = syncErrorText(result.errors)
+    setMessage(`Sync complete: ${result.rowsAppended || 0} appended, ${result.rowsUpdated || 0} updated, ${followerRows} follower rows saved.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
     previewRows.value = []
     followerPreviewRows.value = []
     await Promise.all([loadRuns(), loadAccounts()])
@@ -1088,6 +1112,20 @@ th {
 .run-errors {
   color: #fecaca;
   font-size: 0.86rem;
+}
+
+.debug-panel pre {
+  background: #050914;
+  border: 1px solid #2b3a55;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  max-height: 520px;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

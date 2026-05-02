@@ -11,6 +11,8 @@ const DEFAULT_TIMEZONE = 'Asia/Rangoon';
 const DEFAULT_TIKTOK_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok';
 const DEFAULT_YOUTUBE_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackYouTube';
 const DEFAULT_INSTAGRAM_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackInstagram';
+const INSTAGRAM_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url,followers_count,media_count';
+const INSTAGRAM_BASIC_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url';
 const SHEET_HEADERS = [
   'Date',
   'Content',
@@ -88,6 +90,28 @@ function insightValueToNumber(value) {
 
 function sanitizeDocId(value) {
   return String(value || '').replace(/\//g, '_');
+}
+
+function apiErrorMessage(data, fallback) {
+  if (typeof data?.error === 'string') return data.error;
+  return data?.error?.message
+    || data?.error_description
+    || data?.error_message
+    || fallback;
+}
+
+function isUnsupportedMethodError(error, method) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('unsupported')
+    && message.includes('method type')
+    && message.includes(String(method || '').toLowerCase());
+}
+
+function shouldRetryInstagramTokenExchangeWithPost(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return isUnsupportedMethodError(error, 'get')
+    || message.includes('did not return an access token')
+    || message.includes("content isn't available");
 }
 
 function formatSheetDate(dateValue, timezone = DEFAULT_TIMEZONE) {
@@ -486,101 +510,24 @@ async function writeSheetRowsAt(configId, config, startRow, rows) {
   }]);
 }
 
-async function compactSheetRows(configId, config, snapshots, discoveredRows) {
-  const allSnapshots = await snapshots.get();
-  const existingSnapshots = new Map();
-  let maxTrackedSheetRow = Number(config.headerRow || 1);
-
-  for (const snap of allSnapshots.docs) {
-    const data = snap.data();
-    if (data.configId && data.configId !== configId) continue;
-    const sheetRowNumber = Number(data.sheetRowNumber || 0);
-    if (sheetRowNumber > maxTrackedSheetRow) maxTrackedSheetRow = sheetRowNumber;
-    existingSnapshots.set(snap.id, { snapshotRef: snap.ref, data });
-  }
-
-  let appended = 0;
-  let updated = 0;
-  const compactItems = [];
-  const discoveredDocIds = new Set();
-
-  for (const item of discoveredRows) {
-    const docId = sanitizeDocId(item.key);
-    const snapshotRef = snapshots.doc(docId);
-    const existed = existingSnapshots.has(docId);
-    discoveredDocIds.add(docId);
-    if (existed) updated += 1;
-    else appended += 1;
-    compactItems.push({
-      snapshotRef,
-      existed,
-      rowPayload: {
-        platform: item.platform,
-        contentId: item.contentId,
-        key: item.key,
-        link: item.link,
-        createdAt: item.createdAt,
-        configId,
-        row: item.row,
-        metrics: item.metrics || {},
-        lastSyncedAt: FieldValue.serverTimestamp(),
-      },
-    });
-  }
-
-  compactItems.sort((a, b) => {
-      const dateDiff = new Date(a.rowPayload.createdAt) - new Date(b.rowPayload.createdAt);
-      if (dateDiff) return dateDiff;
-      return String(a.rowPayload.key || '').localeCompare(String(b.rowPayload.key || ''));
-    });
-
+async function rewriteContentSheetRows(configId, config, discoveredRows) {
   const startRow = Number(config.headerRow || 1) + 1;
   const sheetValues = await sheetsFetch(configId, config, 'GET', 'A:I');
   const lastValueRow = Math.max(Number(config.headerRow || 1), sheetValues?.values?.length || 0);
   const clearEndRow = Math.max(
-    maxTrackedSheetRow,
     lastValueRow,
-    startRow + compactItems.length + 25,
+    startRow + discoveredRows.length + 25,
   );
 
   await sheetsBatchClear(configId, config, [
     rangeFor(config, `A${startRow}:I${clearEndRow}`),
   ]);
 
-  if (compactItems.length) {
-    await writeSheetRowsAt(
-      configId,
-      config,
-      startRow,
-      compactItems.map((item) => item.rowPayload.row),
-    );
+  if (discoveredRows.length) {
+    await writeSheetRowsAt(configId, config, startRow, discoveredRows.map((item) => item.row));
   }
 
-  const snapshotWrites = compactItems.map((item, index) => ({
-    snapshotRef: item.snapshotRef,
-    payload: {
-      ...item.rowPayload,
-      configId,
-      sheetRowNumber: startRow + index,
-      lastSyncedAt: FieldValue.serverTimestamp(),
-    },
-  }));
-
-  for (const [docId, existing] of existingSnapshots.entries()) {
-    if (!discoveredDocIds.has(docId) && existing.data?.sheetRowNumber) {
-      snapshotWrites.push({
-        snapshotRef: existing.snapshotRef,
-        payload: {
-          sheetRowNumber: null,
-          excludedFromLastSyncAt: FieldValue.serverTimestamp(),
-        },
-      });
-    }
-  }
-
-  await commitSnapshotWrites(snapshotWrites);
-
-  return { appended, updated };
+  return { appended: discoveredRows.length, updated: 0 };
 }
 
 async function commitSnapshotWrites(items) {
@@ -594,23 +541,12 @@ async function commitSnapshotWrites(items) {
   }
 }
 
-async function commitSnapshotDeletes(refs) {
-  const chunkSize = 450;
-  for (let index = 0; index < refs.length; index += chunkSize) {
-    const batch = db().batch();
-    for (const ref of refs.slice(index, index + chunkSize)) {
-      batch.delete(ref);
-    }
-    await batch.commit();
-  }
-}
-
 async function fbGet(path, token, params = {}) {
   const query = new URLSearchParams({ ...params, access_token: token });
   const response = await fetch(`https://graph.facebook.com/v25.0/${path}?${query.toString()}`);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    throw new Error(data?.error?.message || `Facebook API error on ${path}`);
+    throw new Error(apiErrorMessage(data, `Facebook API error on ${path}`));
   }
   return data;
 }
@@ -620,7 +556,7 @@ async function igDirectGet(path, token, params = {}) {
   const response = await fetch(`https://graph.instagram.com/v25.0/${path}?${query.toString()}`);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    throw new Error(data?.error?.message || `Instagram API error on ${path}`);
+    throw new Error(apiErrorMessage(data, `Instagram API error on ${path}`));
   }
   return data;
 }
@@ -793,6 +729,25 @@ function instagramAccountDocId(igUserId) {
   return `instagram_${sanitizeDocId(igUserId)}`;
 }
 
+function instagramAccountSelected(selectedAccountIds, account) {
+  if (!selectedAccountIds.size) return true;
+  const candidates = [
+    account?.id,
+    account?.accountId,
+    account?.oauthUserId,
+    account?.appScopedId,
+    account?.user_id,
+    account?.oauth_user_id,
+    account?.app_scoped_user_id,
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .flatMap((value) => {
+      const raw = String(value);
+      return [raw, instagramAccountDocId(raw)];
+    });
+  return candidates.some((value) => selectedAccountIds.has(value));
+}
+
 async function getInstagramOAuthConfig(configId) {
   const [clientId, clientSecret, savedRedirectUri] = await Promise.all([
     getSecretValue(configId, 'instagramClientId', ['INSTAGRAM_CLIENT_ID']),
@@ -817,7 +772,19 @@ async function instagramOAuthTokenRequest(params) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    throw new Error(data?.error_description || data?.error_message || data?.error || `Instagram OAuth error ${response.status}`);
+    throw new Error(apiErrorMessage(data, `Instagram OAuth error ${response.status}`));
+  }
+  return data;
+}
+
+async function instagramTokenExchangeFetch(url, options, fallback) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(apiErrorMessage(data, fallback || `Instagram token exchange error ${response.status}`));
+  }
+  if (!data?.access_token) {
+    throw new Error('Instagram token exchange did not return an access token');
   }
   return data;
 }
@@ -828,12 +795,23 @@ async function exchangeInstagramLongLivedToken(shortLivedToken, clientSecret) {
     client_secret: clientSecret,
     access_token: shortLivedToken,
   });
-  const response = await fetch(`https://graph.instagram.com/access_token?${query.toString()}`);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) {
-    throw new Error(data?.error?.message || data?.error_message || `Instagram token exchange error ${response.status}`);
+  const getUrl = `https://graph.instagram.com/access_token?${query.toString()}`;
+
+  try {
+    return await instagramTokenExchangeFetch(getUrl, undefined, 'Instagram token exchange failed');
+  } catch (getError) {
+    if (!shouldRetryInstagramTokenExchangeWithPost(getError)) throw getError;
+
+    try {
+      return await instagramTokenExchangeFetch('https://graph.instagram.com/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: query,
+      }, 'Instagram token exchange failed');
+    } catch (postError) {
+      throw new Error(`Instagram token exchange failed. GET: ${getError.message}; POST: ${postError.message}`);
+    }
   }
-  return data;
 }
 
 async function getUsableInstagramToken(shortLivedToken, clientSecret) {
@@ -843,16 +821,7 @@ async function getUsableInstagramToken(shortLivedToken, clientSecret) {
       isLongLived: true,
     };
   } catch (error) {
-    if (!/unsupported request|unsupported method|get/i.test(error.message || '')) {
-      throw error;
-    }
-    return {
-      access_token: shortLivedToken,
-      token_type: 'bearer',
-      expires_in: 3600,
-      isLongLived: false,
-      exchangeWarning: error.message,
-    };
+    throw new Error(`Instagram long-lived token exchange failed: ${error.message}`);
   }
 }
 
@@ -888,7 +857,7 @@ async function refreshInstagramLongLivedToken(accessToken) {
   const response = await fetch(`https://graph.instagram.com/refresh_access_token?${query.toString()}`);
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    throw new Error(data?.error?.message || data?.error_message || `Instagram token refresh error ${response.status}`);
+    throw new Error(apiErrorMessage(data, `Instagram token refresh error ${response.status}`));
   }
   return data;
 }
@@ -908,21 +877,58 @@ async function getInstagramAccessToken(accountId) {
   return merged.access_token;
 }
 
-async function getInstagramProfile(instagramUserId, accessToken) {
-  const userId = String(instagramUserId || '').trim();
-  if (!userId) return {};
+function normalizeInstagramProfilePayload(data, fallbackId = '') {
+  const payload = Array.isArray(data?.data)
+    ? data.data[0] || {}
+    : data || {};
+  const appScopedId = String(payload.id || '').trim();
+  const professionalId = String(payload.user_id || '').trim();
+  const id = professionalId || appScopedId || String(fallbackId || '').trim();
+  return {
+    ...payload,
+    id,
+    user_id: professionalId || id,
+    appScopedId: appScopedId && appScopedId !== id ? appScopedId : '',
+  };
+}
+
+async function getInstagramProfileFromPath(path, accessToken, fallbackId = '') {
   try {
-    return await igDirectGet(userId, accessToken, {
-      fields: 'id,username,name,profile_picture_url,followers_count,media_count,account_type',
-    });
-  } catch (error) {
-    if (/unsupported request|unsupported method|get/i.test(error.message || '')) {
+    return normalizeInstagramProfilePayload(await igDirectGet(path, accessToken, {
+      fields: INSTAGRAM_PROFILE_FIELDS,
+    }), fallbackId);
+  } catch (fullProfileError) {
+    try {
+      const profile = normalizeInstagramProfilePayload(await igDirectGet(path, accessToken, {
+        fields: INSTAGRAM_BASIC_PROFILE_FIELDS,
+      }), fallbackId);
       return {
-        id: userId,
-        profileWarning: error.message,
+        ...profile,
+        profileWarning: fullProfileError.message,
       };
+    } catch (basicProfileError) {
+      throw new Error(`${basicProfileError.message}; full profile fields also failed: ${fullProfileError.message}`);
     }
-    throw error;
+  }
+}
+
+async function getInstagramProfile(instagramUserId, accessToken) {
+  const fallbackId = String(instagramUserId || '').trim();
+  let meError = null;
+  try {
+    return await getInstagramProfileFromPath('me', accessToken, fallbackId);
+  } catch (error) {
+    meError = error;
+  }
+
+  if (!fallbackId) {
+    throw new Error(`Instagram profile lookup failed: ${meError.message}`);
+  }
+
+  try {
+    return await getInstagramProfileFromPath(fallbackId, accessToken, fallbackId);
+  } catch (idError) {
+    throw new Error(`Instagram profile lookup failed. /me: ${meError.message}; /${fallbackId}: ${idError.message}`);
   }
 }
 
@@ -944,11 +950,10 @@ async function discoverInstagramLinkedAccounts(config, seen = new Set()) {
       if (!igAccount?.id || seen.has(String(igAccount.id))) continue;
 
       const docId = instagramAccountDocId(igAccount.id);
-      if (
-        selectedAccountIds.size
-        && !selectedAccountIds.has(String(igAccount.id))
-        && !selectedAccountIds.has(docId)
-      ) {
+      if (!instagramAccountSelected(selectedAccountIds, {
+        id: docId,
+        accountId: igAccount.id,
+      })) {
         continue;
       }
 
@@ -1004,11 +1009,7 @@ async function discoverInstagramDirectAccounts(config, seen = new Set()) {
   for (const accountDoc of accountsSnap.docs) {
     const account = { id: accountDoc.id, ...accountDoc.data() };
     if (account.tokenSource !== 'instagram' && account.authSource !== 'instagram') continue;
-    if (
-      selectedAccountIds.size
-      && !selectedAccountIds.has(String(account.id))
-      && !selectedAccountIds.has(String(account.accountId))
-    ) {
+    if (!instagramAccountSelected(selectedAccountIds, account)) {
       continue;
     }
 
@@ -1041,9 +1042,11 @@ async function discoverInstagramDirectAccounts(config, seen = new Set()) {
         username: normalizedAccount.username,
         name: normalizedAccount.name,
         accountType: profile?.account_type || account.accountType || '',
+        appScopedId: profile?.appScopedId || account.appScopedId || '',
+        oauthUserId: account.oauthUserId || profile?.appScopedId || '',
         tokenSource: 'instagram',
         authSource: 'instagram',
-        profileWarning: profile?.profileWarning || account.profileWarning || '',
+        profileWarning: profile?.profileWarning || '',
         latestFollowerCount: followers,
         mediaCount: nullableNumber(profile?.media_count),
         profilePictureUrl: profile?.profile_picture_url || account.profilePictureUrl || '',
@@ -1080,6 +1083,7 @@ function instagramContentType(media) {
   const mediaType = String(media?.media_type || '').toLowerCase();
   if (mediaProductType.includes('reel')) return 'Reels';
   if (mediaProductType.includes('live')) return 'Live';
+  if (mediaProductType.includes('stor')) return 'Stories';
   if (mediaType.includes('video')) return 'Video';
   if (mediaType.includes('carousel')) return 'Carousel';
   return 'Static';
@@ -1089,68 +1093,454 @@ function instagramTitle(media) {
   return String(media?.caption || media?.id || '').trim();
 }
 
+function safeInstagramDebugValue(value) {
+  if (Array.isArray(value)) return value.map(safeInstagramDebugValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !/^(access[_-]?token|refresh[_-]?token|id[_-]?token)$/i.test(key))
+      .map(([key, item]) => [key, safeInstagramDebugValue(item)]),
+  );
+}
+
+function pushInstagramDebug(debug, event) {
+  if (!Array.isArray(debug)) return;
+  debug.push({
+    at: new Date().toISOString(),
+    ...safeInstagramDebugValue(event),
+  });
+}
+
+function instagramAccountDebug(account) {
+  return safeInstagramDebugValue({
+    id: account?.id,
+    accountId: account?.accountId,
+    displayName: account?.displayName,
+    username: account?.username,
+    tokenSource: account?.tokenSource,
+    authSource: account?.authSource,
+    tokenType: account?.tokenType,
+    oauthUserId: account?.oauthUserId,
+    appScopedId: account?.appScopedId,
+  });
+}
+
 async function instagramApiGet(path, token, tokenSource, params = {}) {
   return tokenSource === 'instagram'
     ? igDirectGet(path, token, params)
     : fbGet(path, token, params);
 }
 
-async function tryInstagramMetric(mediaId, token, tokenSource, metricNames) {
-  for (const metricName of metricNames) {
+function instagramPrimaryInsightMetricNames(media = null) {
+  const contentType = media ? instagramContentType(media) : '';
+  if (contentType === 'Stories') return ['reach', 'views', 'replies', 'shares', 'navigation'];
+  return ['reach', 'views', 'total_interactions', 'likes', 'comments', 'saved', 'shares'];
+}
+
+function instagramLegacyInsightMetricNames(media = null) {
+  if (!media) return ['impressions', 'plays', 'video_views', 'engagement'];
+  const contentType = media ? instagramContentType(media) : '';
+  if (contentType === 'Stories') {
+    return ['impressions', 'replies', 'exits', 'taps_forward', 'taps_back'];
+  }
+  if (['Reels', 'Video', 'Live'].includes(contentType)) {
+    return ['plays', 'impressions', 'video_views', 'engagement'];
+  }
+  return ['impressions', 'engagement'];
+}
+
+function instagramExpandedInsightField(metricNames) {
+  return `insights.metric(${metricNames.join(',')})`;
+}
+
+async function requestInstagramMediaPage(account, path, baseParams, fieldSet, debug = [], reason = '') {
+  const params = { ...baseParams, fields: fieldSet.fields };
+  pushInstagramDebug(debug, {
+    stage: 'media_list_request',
+    account: instagramAccountDebug(account),
+    path,
+    params,
+    fieldSet: fieldSet.name,
+    reason,
+  });
+  const data = await instagramApiGet(path, account.accessToken, account.tokenSource, params);
+  pushInstagramDebug(debug, {
+    stage: 'media_list_response',
+    path,
+    fieldSet: fieldSet.name,
+    response: data,
+  });
+  return data;
+}
+
+async function requestInstagramMediaPageWithFallbacks(account, path, baseParams, fieldSets, debug = [], reason = '') {
+  let lastError = null;
+  for (const fieldSet of fieldSets) {
     try {
-      const data = await instagramApiGet(`${mediaId}/insights`, token, tokenSource, {
-        metric: metricName,
+      return await requestInstagramMediaPage(account, path, baseParams, fieldSet, debug, reason);
+    } catch (error) {
+      lastError = error;
+      pushInstagramDebug(debug, {
+        stage: 'media_list_error',
+        path,
+        params: { ...baseParams, fields: fieldSet.fields },
+        fieldSet: fieldSet.name,
+        reason,
+        message: error.message,
       });
-      const values = data?.data?.[0]?.values || [];
-      if (values.length) return insightValueToNumber(values[values.length - 1]?.value);
-    } catch (_) {
-      // Instagram metrics vary by media type, age, and account permissions.
     }
+  }
+  throw lastError || new Error(`Instagram media request failed for ${path}`);
+}
+
+async function getInstagramMediaPage(account, after = '', debug = []) {
+  const baseParams = {
+    limit: '50',
+    ...(after ? { after } : {}),
+  };
+  const fullFields = 'id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count';
+  const basicFields = 'id,caption,media_type,permalink,timestamp';
+  const fieldSets = [
+    {
+      name: 'expanded_current_insights',
+      fields: `${fullFields},${instagramExpandedInsightField(instagramPrimaryInsightMetricNames())}`,
+    },
+    {
+      name: 'expanded_legacy_insights',
+      fields: `${fullFields},${instagramExpandedInsightField(['reach', ...instagramLegacyInsightMetricNames()])}`,
+    },
+    {
+      name: 'media_fields',
+      fields: fullFields,
+    },
+    {
+      name: 'basic_media_fields',
+      fields: basicFields,
+    },
+  ];
+  const mediaPath = `${account.accountId}/media`;
+  const fallbackMediaPath = account.tokenSource === 'instagram' ? 'me/media' : '';
+
+  const data = await requestInstagramMediaPageWithFallbacks(account, mediaPath, baseParams, fieldSets, debug);
+  if (!fallbackMediaPath || after || (data?.data || []).length) return data;
+
+  try {
+    return await requestInstagramMediaPageWithFallbacks(
+      account,
+      fallbackMediaPath,
+      baseParams,
+      fieldSets,
+      debug,
+      'primary returned no media',
+    );
+  } catch (fallbackError) {
+    pushInstagramDebug(debug, {
+      stage: 'media_list_error',
+      path: fallbackMediaPath,
+      reason: 'fallback after primary returned no media',
+      message: fallbackError.message,
+    });
+    return data;
+  }
+}
+
+function instagramInsightMetricNames(media) {
+  return [
+    ...instagramPrimaryInsightMetricNames(media),
+    ...instagramLegacyInsightMetricNames(media),
+  ].filter((metricName, index, all) => all.indexOf(metricName) === index);
+}
+
+function instagramInsightsMap(data) {
+  const insights = {};
+  for (const item of data?.data || []) {
+    const value = item?.values?.[0]?.value;
+    insights[item?.name] = insightValueToNumber(value);
+  }
+  return insights;
+}
+
+function mergeInstagramInsights(...items) {
+  return items.reduce((merged, item) => {
+    for (const [key, value] of Object.entries(item || {})) {
+      if (value !== null && value !== undefined) merged[key] = value;
+    }
+    return merged;
+  }, {});
+}
+
+function instagramExpandedInsightsFromMedia(media) {
+  return instagramInsightsMap(media?.insights || {});
+}
+
+function instagramNeedsMoreInsights(media, insights) {
+  const isStory = instagramContentType(media) === 'Stories';
+  const hasReach = instagramMetricFromInsights(insights, ['reach']) !== null;
+  const hasViews = instagramMetricFromInsights(insights, ['views', 'impressions', 'plays', 'video_views']) !== null;
+  const hasInteractions = isStory
+    ? instagramMetricFromInsights(insights, ['total_interactions', 'engagement', 'replies', 'shares']) !== null
+    : instagramMetricFromInsights(insights, [
+      'total_interactions',
+      'engagement',
+      'likes',
+      'comments',
+      'saved',
+      'shares',
+    ]) !== null;
+  return !hasReach || !hasViews || !hasInteractions;
+}
+
+async function getInstagramInsightsForMedia(media, token, tokenSource, debug = [], existingInsights = {}) {
+  const primaryMetricNames = instagramPrimaryInsightMetricNames(media);
+  const metricNames = instagramInsightMetricNames(media);
+  const path = `${media.id}/insights`;
+  const insights = { ...existingInsights };
+  if (!instagramNeedsMoreInsights(media, insights)) {
+    pushInstagramDebug(debug, {
+      stage: 'insights_from_media_list',
+      mediaId: media.id,
+      insights,
+    });
+    return insights;
+  }
+
+  try {
+    pushInstagramDebug(debug, {
+      stage: 'insights_request',
+      media: safeInstagramDebugValue(media),
+      path,
+      params: { metric: primaryMetricNames.join(',') },
+    });
+    const data = await instagramApiGet(path, token, tokenSource, {
+      metric: primaryMetricNames.join(','),
+    });
+    pushInstagramDebug(debug, {
+      stage: 'insights_response',
+      mediaId: media.id,
+      path,
+      response: data,
+    });
+    Object.assign(insights, instagramInsightsMap(data));
+  } catch (error) {
+    pushInstagramDebug(debug, {
+      stage: 'insights_error',
+      mediaId: media.id,
+      path,
+      params: { metric: primaryMetricNames.join(',') },
+      message: error.message,
+    });
+    for (const metricName of metricNames) {
+      if (nullableNumber(insights[metricName]) !== null) continue;
+      try {
+        pushInstagramDebug(debug, {
+          stage: 'insights_request',
+          mediaId: media.id,
+          path,
+          params: { metric: metricName },
+          reason: 'single metric fallback',
+        });
+        const data = await instagramApiGet(path, token, tokenSource, {
+          metric: metricName,
+        });
+        pushInstagramDebug(debug, {
+          stage: 'insights_response',
+          mediaId: media.id,
+          path,
+          response: data,
+        });
+        Object.assign(insights, instagramInsightsMap(data));
+      } catch (singleMetricError) {
+        pushInstagramDebug(debug, {
+          stage: 'insights_error',
+          mediaId: media.id,
+          path,
+          params: { metric: metricName },
+          message: singleMetricError.message,
+        });
+        // Some metrics are unavailable depending on media type, age, and permissions.
+      }
+    }
+  }
+
+  if (instagramNeedsMoreInsights(media, insights)) {
+    for (const metricName of metricNames) {
+      if (nullableNumber(insights[metricName]) !== null) continue;
+      try {
+        pushInstagramDebug(debug, {
+          stage: 'insights_request',
+          mediaId: media.id,
+          path,
+          params: { metric: metricName },
+          reason: 'fill missing metric after batch response',
+        });
+        const data = await instagramApiGet(path, token, tokenSource, {
+          metric: metricName,
+        });
+        pushInstagramDebug(debug, {
+          stage: 'insights_response',
+          mediaId: media.id,
+          path,
+          response: data,
+        });
+        Object.assign(insights, instagramInsightsMap(data));
+      } catch (singleMetricError) {
+        pushInstagramDebug(debug, {
+          stage: 'insights_error',
+          mediaId: media.id,
+          path,
+          params: { metric: metricName },
+          message: singleMetricError.message,
+        });
+      }
+    }
+  }
+
+  return mergeInstagramInsights(existingInsights, insights);
+}
+
+function instagramMetricFromInsights(insights, names) {
+  for (const name of names) {
+    const value = nullableNumber(insights?.[name]);
+    if (value !== null) return value;
   }
   return null;
 }
 
+function sumPresentNumbers(values) {
+  let total = 0;
+  let hasValue = false;
+  for (const value of values) {
+    const numeric = nullableNumber(value);
+    if (numeric !== null) {
+      total += numeric;
+      hasValue = true;
+    }
+  }
+  return hasValue ? total : null;
+}
+
+function instagramInteractionTotal(media, insights, isStory) {
+  const directTotal = instagramMetricFromInsights(
+    insights,
+    ['total_interactions', 'engagement'],
+  );
+  if (directTotal !== null) return directTotal;
+
+  if (isStory) {
+    return sumPresentNumbers([
+      instagramMetricFromInsights(insights, ['replies']),
+      instagramMetricFromInsights(insights, ['shares']),
+    ]);
+  }
+
+  const likes = instagramMetricFromInsights(insights, ['likes']);
+  const comments = instagramMetricFromInsights(insights, ['comments']);
+  return sumPresentNumbers([
+    likes ?? nullableNumber(media?.like_count),
+    comments ?? nullableNumber(media?.comments_count),
+    instagramMetricFromInsights(insights, ['saved', 'saves']),
+    instagramMetricFromInsights(insights, ['shares']),
+  ]);
+}
+
 async function discoverInstagramRows(config) {
   const rows = [];
+  const debug = [];
   const { start, end } = getSyncWindow(config);
   const sinceMs = start.getTime();
   const untilMs = end.getTime();
   const discovered = await discoverInstagramAccounts(config);
   const errors = [...discovered.errors];
+  pushInstagramDebug(debug, {
+    stage: 'sync_window',
+    start: start.toISOString(),
+    end: end.toISOString(),
+    configStartDate: config.startDate,
+    configEndDate: config.endDate,
+    timezone: config.timezone,
+  });
+  pushInstagramDebug(debug, {
+    stage: 'accounts_discovered',
+    accounts: discovered.accounts.map(instagramAccountDebug),
+    errors,
+  });
 
   for (const account of discovered.accounts) {
     try {
+      pushInstagramDebug(debug, {
+        stage: 'account_sync_start',
+        account: instagramAccountDebug(account),
+      });
       let after = '';
       let keepGoing = true;
-      const fields = 'id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count';
+      const stats = {
+        pages: 0,
+        mediaSeen: 0,
+        mediaInRange: 0,
+        mediaSkippedNewer: 0,
+        mediaSkippedOlder: 0,
+        rowsCreated: 0,
+      };
 
       while (keepGoing) {
-        const data = await instagramApiGet(`${account.accountId}/media`, account.accessToken, account.tokenSource, {
-          fields,
-          limit: '50',
-          ...(after ? { after } : {}),
-        });
+        const data = await getInstagramMediaPage(account, after, debug);
         const mediaItems = data?.data || [];
+        stats.pages += 1;
+        stats.mediaSeen += mediaItems.length;
+        pushInstagramDebug(debug, {
+          stage: 'media_page_items',
+          account: instagramAccountDebug(account),
+          count: mediaItems.length,
+          after,
+        });
         if (!mediaItems.length) break;
 
         for (const media of mediaItems) {
           const createdAt = media?.timestamp || new Date().toISOString();
           const createdAtMs = new Date(createdAt).getTime();
-          if (createdAtMs > untilMs) continue;
+          if (createdAtMs > untilMs) {
+            stats.mediaSkippedNewer += 1;
+            pushInstagramDebug(debug, {
+              stage: 'media_skipped',
+              mediaId: media.id,
+              reason: 'newer than configured end date',
+              createdAt,
+              endDate: config.endDate,
+            });
+            continue;
+          }
           if (createdAtMs < sinceMs) {
             keepGoing = false;
+            stats.mediaSkippedOlder += 1;
+            pushInstagramDebug(debug, {
+              stage: 'media_skipped',
+              mediaId: media.id,
+              reason: 'older than configured start date; stopping pagination',
+              createdAt,
+              startDate: config.startDate,
+            });
             continue;
           }
 
+          stats.mediaInRange += 1;
           const type = instagramContentType(media);
-          const [reach, viewsOrImpressions, insightInteractions] = await Promise.all([
-            tryInstagramMetric(media.id, account.accessToken, account.tokenSource, ['reach']),
-            tryInstagramMetric(media.id, account.accessToken, account.tokenSource, ['views', 'impressions', 'plays']),
-            tryInstagramMetric(media.id, account.accessToken, account.tokenSource, ['total_interactions', 'engagement']),
-          ]);
-          const fallbackInteractions = toNumber(media.like_count) + toNumber(media.comments_count);
-          const interactions = insightInteractions ?? fallbackInteractions;
+          const expandedInsights = instagramExpandedInsightsFromMedia(media);
+          const insights = await getInstagramInsightsForMedia(
+            media,
+            account.accessToken,
+            account.tokenSource,
+            debug,
+            expandedInsights,
+          );
           const isVideo = ['Live', 'Reels', 'Video'].includes(type);
+          const isStory = type === 'Stories';
+          const reach = instagramMetricFromInsights(insights, ['reach']);
+          const viewsOrImpressions = instagramMetricFromInsights(
+            insights,
+            ['views', 'impressions', 'plays', 'video_views'],
+          );
+          const fallbackInteractions = toNumber(media.like_count) + toNumber(media.comments_count);
+          const interactions = instagramInteractionTotal(media, insights, isStory) ?? fallbackInteractions;
           const videoViews = isVideo ? viewsOrImpressions : null;
 
           rows.push({
@@ -1175,19 +1565,42 @@ async function discoverInstagramRows(config) {
               viewsOrImpressions,
               interactions,
               videoViews,
+              saved: instagramMetricFromInsights(insights, ['saved', 'saves']),
+              insights,
             },
+          });
+          stats.rowsCreated += 1;
+          pushInstagramDebug(debug, {
+            stage: 'row_created',
+            mediaId: media.id,
+            type,
+            row: rows[rows.length - 1].row,
+            metrics: rows[rows.length - 1].metrics,
           });
         }
 
         after = data?.paging?.cursors?.after || '';
         if (!after) break;
       }
+      pushInstagramDebug(debug, {
+        stage: 'account_sync_complete',
+        account: instagramAccountDebug(account),
+        stats,
+        note: stats.mediaSeen && !stats.mediaInRange
+          ? 'No insights were requested because no Instagram media fell inside the selected sheet date range.'
+          : '',
+      });
     } catch (error) {
       errors.push({ platform: 'instagram', accountId: account.accountId, message: error.message });
+      pushInstagramDebug(debug, {
+        stage: 'account_sync_error',
+        account: instagramAccountDebug(account),
+        message: error.message,
+      });
     }
   }
 
-  return { rows, errors };
+  return { rows, errors, debug };
 }
 
 async function youtubeApi(configId, path, params) {
@@ -1979,26 +2392,8 @@ function followerGrowth(now, before) {
   return Number(now) - Number(before);
 }
 
-function legacyFollowerCount(value, sourceDate = '') {
-  const count = nullableNumber(value);
-  if (count === 0 && !sourceDate) return null;
-  return count;
-}
-
 function observationDocId(configId, key, date) {
   return sanitizeDocId(`${configId}:${date}:${key}`);
-}
-
-function recordObservationFromRange(record) {
-  const followers = nullableNumber(record.endFollowers);
-  if (followers === null || !record.endDate) return null;
-  if (record.endFollowersSourceDate && record.endFollowersSourceDate > record.endDate) return null;
-  if (!record.endFollowersSourceDate && record.lastSyncedDate && record.lastSyncedDate > record.endDate) return null;
-  return {
-    key: record.key,
-    date: record.endDate,
-    followers,
-  };
 }
 
 async function saveFollowerObservations(configId, config, accounts) {
@@ -2050,19 +2445,7 @@ async function getFollowerObservationRecords(configId, accountKeys, config = {})
       && item.followers !== null
     ));
 
-  const rangeSnap = await db().collection('follower_snapshots')
-    .where('configId', '==', configId)
-    .get();
-  const rangeObservations = rangeSnap.docs
-    .map((snapshot) => recordObservationFromRange(followerSnapshotToRecord(snapshot)))
-    .filter((item) => (
-      item
-      && accountKeys.has(item.key)
-      && item.date
-      && item.followers !== null
-    ));
-
-  return [...observations, ...rangeObservations];
+  return observations;
 }
 
 function closestObservationOnOrBefore(records, key, date) {
@@ -2145,175 +2528,39 @@ function followerAccountsMap(rows) {
   );
 }
 
-function followerSnapshotToRecord(snapshot) {
-  const data = snapshot.data();
-  const platformKey = data.platformKey || String(data.platform || '').toLowerCase();
-  const accountId = String(data.accountId || '');
-  const startFollowersSourceDate = data.startFollowersSourceDate || '';
-  const endFollowersSourceDate = data.endFollowersSourceDate || '';
-  return {
-    snapshotRef: snapshot.ref,
-    key: followerAccountKey(platformKey, accountId),
-    dateRange: data.dateRange || '',
-    startDate: data.startDate || '',
-    endDate: data.endDate || '',
-    platform: data.platform || '',
-    platformKey,
-    accountId,
-    accountName: data.accountName || accountId,
-    followers: nullableNumber(data.followers),
-    startFollowers: legacyFollowerCount(data.startFollowers, startFollowersSourceDate),
-    endFollowers: legacyFollowerCount(data.endFollowers, endFollowersSourceDate),
-    startFollowersSourceDate,
-    endFollowersSourceDate,
-    currentFollowers: nullableNumber(data.currentFollowers),
-    lastSyncedDate: timestampToLocalDate(data.lastSyncedAt, data.timezone || DEFAULT_TIMEZONE),
-  };
-}
-
-function followerRecordRow(observations, record) {
-  const startFollowers = nullableNumber(record.startFollowers)
-    ?? closestObservationOnOrBefore(observations, record.key, record.startDate)?.followers
-    ?? null;
-  const endFollowers = nullableNumber(record.endFollowers)
-    ?? closestObservationOnOrBefore(observations, record.key, record.endDate)?.followers
-    ?? null;
-  return [
-    record.dateRange,
-    record.platform,
-    record.accountName,
-    record.accountId,
-    numberOrDash(startFollowers),
-    numberOrDash(endFollowers),
-    followerGrowth(endFollowers, startFollowers),
-    numberOrDash(record.currentFollowers ?? record.followers),
-  ];
-}
-
-async function rewriteFollowerSheetFromSnapshots(configId, config, followerTab) {
+async function rewriteFollowerSheetRows(configId, config, followerTab, rows) {
   const followerConfig = { ...config, sheetTab: followerTab };
   const startRow = Number(config.headerRow || 1) + 1;
-  const snap = await db().collection('follower_snapshots')
-    .where('configId', '==', configId)
-    .get();
-  const records = snap.docs
-    .map(followerSnapshotToRecord)
-    .filter((record) => (
-      record.followers !== null
-      && record.startDate
-      && record.endDate
-      && record.platform
-      && record.accountId
-    ))
-    .sort((a, b) => (
-      String(a.startDate).localeCompare(String(b.startDate))
-        || String(a.endDate).localeCompare(String(b.endDate))
-        || a.platform.localeCompare(b.platform)
-        || a.accountName.localeCompare(b.accountName)
-        || a.accountId.localeCompare(b.accountId)
-    ));
-  const accountKeys = new Set(records.map((record) => record.key));
-  const savedObservations = await getFollowerObservationRecords(configId, accountKeys, config);
-  const rangeObservations = records
-    .map(recordObservationFromRange)
-    .filter(Boolean);
-  const observations = [...savedObservations, ...rangeObservations];
-
   const sheetValues = await sheetsFetch(configId, followerConfig, 'GET', 'A:H');
   const clearEndRow = Math.max(
     sheetValues?.values?.length || 0,
-    startRow + records.length + 25,
+    startRow + rows.length + 25,
   );
 
   await sheetsBatchClear(configId, config, [
     rangeForTab(followerTab, `A${startRow}:H${clearEndRow}`),
   ]);
 
-  const rows = records.map((record) => followerRecordRow(observations, record));
   if (rows.length) {
     await sheetsBatchUpdate(configId, followerConfig, [{
       range: rangeForTab(followerTab, `A${startRow}:H${startRow + rows.length - 1}`),
       values: rows,
     }]);
   }
-
-  await commitSnapshotWrites(records.map((record, index) => ({
-    snapshotRef: record.snapshotRef,
-    payload: {
-      sheetRowNumber: startRow + index,
-      row: rows[index],
-      lastSheetRewriteAt: FieldValue.serverTimestamp(),
-    },
-  })));
 }
 
 async function writeFollowerSheet(configId, config, rows) {
   const followerTab = config.followerSheetTab || 'Follower Growth';
-  const snapshots = db().collection('follower_snapshots');
-  let appended = 0;
-  let updated = 0;
-  const snapshotWrites = [];
-  const currentSnapshotIds = new Set();
-
-  for (const item of rows) {
-    const docId = sanitizeDocId(`${configId}:${config.startDate}:${config.endDate}:${item.key}`);
-    currentSnapshotIds.add(docId);
-    const snapshotRef = snapshots.doc(docId);
-    const snapshot = await snapshotRef.get();
-
-    if (snapshot.exists) updated += 1;
-    else appended += 1;
-
-    snapshotWrites.push({
-      snapshotRef,
-      payload: {
-        configId,
-        dateRange: item.dateRange,
-        startDate: config.startDate,
-        endDate: config.endDate,
-        platform: item.platform,
-        platformKey: item.platformKey,
-        accountId: item.accountId,
-        accountName: item.accountName,
-        followers: item.followers,
-        startFollowers: item.startFollowers,
-        endFollowers: item.endFollowers,
-        startFollowersSourceDate: item.startFollowersSourceDate,
-        endFollowersSourceDate: item.endFollowersSourceDate,
-        currentFollowers: item.currentFollowers,
-        timezone: config.timezone,
-        sheetTab: followerTab,
-        row: item.row,
-        lastSyncedAt: FieldValue.serverTimestamp(),
-      },
-    });
-  }
-
-  await commitSnapshotWrites(snapshotWrites);
-  const existingRangeSnap = await snapshots
-    .where('configId', '==', configId)
-    .get();
-  const obsoleteRefs = existingRangeSnap.docs
-    .filter((snapshot) => {
-      const data = snapshot.data();
-      return (
-        data.startDate === config.startDate
-        && data.endDate === config.endDate
-        && !currentSnapshotIds.has(snapshot.id)
-      );
-    })
-    .map((snapshot) => snapshot.ref);
-  await commitSnapshotDeletes(obsoleteRefs);
 
   await saveFollowerObservations(configId, config, rows);
-  await rewriteFollowerSheetFromSnapshots(configId, config, followerTab);
+  await rewriteFollowerSheetRows(configId, config, followerTab, rows.map((item) => item.row));
 
   await db().collection('sync_configs').doc(configId).set({
     lastFollowerAccounts: followerAccountsMap(rows),
     lastFollowerSyncedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  return { appended, updated, deleted: obsoleteRefs.length };
+  return { appended: rows.length, updated: 0, deleted: 0 };
 }
 
 async function syncFollowerSheet(configId, config, preview = false) {
@@ -2351,38 +2598,36 @@ async function discoverRows(configId, config) {
   const settled = await Promise.allSettled(tasks);
   const rows = [];
   const errors = [];
+  const instagramDebug = [];
   for (const item of settled) {
     if (item.status === 'fulfilled') {
       rows.push(...item.value.rows);
       errors.push(...item.value.errors);
+      if (Array.isArray(item.value.debug)) instagramDebug.push(...item.value.debug);
     } else {
       errors.push({ platform: 'system', message: item.reason?.message || String(item.reason) });
     }
   }
-  return { rows, errors };
+  return { rows, errors, instagramDebug };
 }
 
 async function applyRowsToSheet(configId, config, normalizedRows, preview = false) {
   const results = { appended: 0, updated: 0, previewRows: [] };
-  const snapshots = db().collection('content_snapshots');
-
   const sortedRows = normalizedRows.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  for (const item of sortedRows) {
-    const docId = sanitizeDocId(item.key);
 
+  for (const item of sortedRows) {
     if (preview) {
-      const snapshot = await snapshots.doc(docId).get();
-      results.previewRows.push({ action: snapshot.exists ? 'update' : 'append', key: item.key, row: item.row });
+      results.previewRows.push({ action: 'rewrite', key: item.key, row: item.row });
     }
   }
 
   if (preview) return results;
 
-  const compactResult = await compactSheetRows(configId, config, snapshots, sortedRows);
+  const rewriteResult = await rewriteContentSheetRows(configId, config, sortedRows);
   return {
     ...results,
-    appended: compactResult.appended,
-    updated: compactResult.updated,
+    appended: rewriteResult.appended,
+    updated: rewriteResult.updated,
   };
 }
 
@@ -2475,6 +2720,7 @@ async function runSync({
       errors: allErrors,
       previewRows: preview ? writeResult.previewRows.slice(0, 50) : undefined,
       followerPreviewRows: preview ? followerResult.previewRows.slice(0, 50) : undefined,
+      instagramDebug: discovered.instagramDebug || [],
     };
   } catch (error) {
     await runRef.set({
@@ -2627,15 +2873,29 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
       grant_type: 'authorization_code',
       redirect_uri: redirectUri,
     });
-    const usableToken = await getUsableInstagramToken(shortLivedToken.access_token, clientSecret);
-    const instagramUserId = String(shortLivedToken.user_id || '');
+    const oauthUserId = String(shortLivedToken.user_id || '').trim();
+    let profile = await getInstagramProfile(oauthUserId, shortLivedToken.access_token);
+    const usableToken = await getUsableInstagramToken(shortLivedToken.access_token, clientSecret)
+      .catch((error) => ({
+        access_token: shortLivedToken.access_token,
+        token_type: 'bearer',
+        expires_in: Number(shortLivedToken.expires_in || 3600),
+        isLongLived: false,
+        exchangeWarning: error.message,
+      }));
+    if (usableToken.isLongLived) {
+      profile = await getInstagramProfile(oauthUserId, usableToken.access_token)
+        .catch(() => profile);
+    }
+    const instagramUserId = String(profile?.user_id || profile?.id || oauthUserId || '').trim();
     if (!instagramUserId) throw new Error('Instagram account ID was not returned');
-    const profile = await getInstagramProfile(instagramUserId, usableToken.access_token);
 
     const accountId = instagramAccountDocId(instagramUserId);
     await saveInstagramTokenSecret(accountId, {
       ...usableToken,
       user_id: instagramUserId,
+      oauth_user_id: oauthUserId,
+      app_scoped_user_id: profile?.appScopedId || '',
     });
 
     const displayName = profile?.username || profile?.name || instagramUserId;
@@ -2646,6 +2906,8 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
       username: profile?.username || '',
       name: profile?.name || '',
       accountType: profile?.account_type || '',
+      appScopedId: profile?.appScopedId || '',
+      oauthUserId,
       tokenSource: 'instagram',
       authSource: 'instagram',
       tokenType: usableToken.isLongLived ? 'long_lived' : 'short_lived',
@@ -2662,7 +2924,7 @@ export const oauthCallbackInstagram = onRequest({ cors: true, maxInstances: 10 }
 
     const warning = usableToken.isLongLived
       ? ''
-      : '<p>Connected with a short-lived token because Meta rejected the long-lived token exchange. Reconnect if sync later reports that the Instagram token expired.</p>';
+      : '<p>Profile test call succeeded, but Meta did not issue a long-lived token yet. Request advanced access in Meta, then reconnect Instagram for scheduled sync.</p>';
     res.status(200).send(`<html><body><h2>Instagram connected.</h2>${warning}<p>You can close this tab and return to the dashboard.</p></body></html>`);
   } catch (callbackError) {
     res.status(400).send(`<html><body><h2>Instagram connection failed</h2><p>${callbackError.message}</p></body></html>`);
