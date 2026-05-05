@@ -196,19 +196,47 @@ function isCurrentLocalDate(date, timezone = DEFAULT_TIMEZONE) {
   return String(date || '') === localDateString(new Date(), timezone);
 }
 
+function syncWindowDates(config) {
+  return {
+    startDate: isoDateOnly(config.startDate) || defaultStartDate(),
+    endDate: isoDateOnly(config.endDate) || defaultEndDate(),
+  };
+}
+
 function getSyncWindow(config) {
-  const start = new Date(`${config.startDate || defaultStartDate()}T00:00:00.000Z`);
-  const end = new Date(`${config.endDate || defaultEndDate()}T23:59:59.999Z`);
+  const { startDate, endDate } = syncWindowDates(config);
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T23:59:59.999Z`);
   return { start, end };
 }
 
+function configForDateScope(config, scope) {
+  if (scope === 'followers') {
+    return {
+      ...config,
+      startDate: config.followerStartDate || config.startDate,
+      endDate: config.followerEndDate || config.endDate,
+    };
+  }
+
+  return {
+    ...config,
+    startDate: config.contentStartDate || config.startDate,
+    endDate: config.contentEndDate || config.endDate,
+  };
+}
+
 function normalizeConfig(input = {}) {
-  const fallbackStartDate = input.startDate
+  const legacyStartDate = input.startDate
     ? isoDateOnly(input.startDate)
     : new Date(
       Date.now() - Math.max(1, Math.min(90, Number(input.lookbackDays || 14))) * 24 * 60 * 60 * 1000,
     ).toISOString().slice(0, 10);
-  const fallbackEndDate = isoDateOnly(input.endDate) || defaultEndDate();
+  const legacyEndDate = isoDateOnly(input.endDate) || defaultEndDate();
+  const contentStartDate = isoDateOnly(input.contentStartDate) || legacyStartDate;
+  const contentEndDate = isoDateOnly(input.contentEndDate) || legacyEndDate;
+  const followerStartDate = isoDateOnly(input.followerStartDate) || legacyStartDate;
+  const followerEndDate = isoDateOnly(input.followerEndDate) || legacyEndDate;
 
   const normalized = {
     sheetId: String(input.sheetId || '').trim(),
@@ -218,8 +246,12 @@ function normalizeConfig(input = {}) {
     timezone: String(input.timezone || DEFAULT_TIMEZONE).trim(),
     scheduleTime: String(input.scheduleTime || '09:00').trim(),
     scheduleEnabled: Boolean(input.scheduleEnabled),
-    startDate: fallbackStartDate,
-    endDate: fallbackEndDate,
+    startDate: contentStartDate,
+    endDate: contentEndDate,
+    contentStartDate,
+    contentEndDate,
+    followerStartDate,
+    followerEndDate,
     enabledPlatforms: {
       facebook: input.enabledPlatforms?.facebook !== false,
       instagram: input.enabledPlatforms?.instagram !== false,
@@ -262,6 +294,17 @@ function normalizeConfig(input = {}) {
   return normalized;
 }
 
+function assertDateRange(label, startDate, endDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    throw new Error(`${label} start date must use YYYY-MM-DD format`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    throw new Error(`${label} end date must use YYYY-MM-DD format`);
+  }
+  const { start, end } = getSyncWindow({ startDate, endDate });
+  if (start > end) throw new Error(`${label} start date must be before or equal to end date`);
+}
+
 function assertValidConfig(config) {
   if (!config.sheetId) throw new Error('Google Sheet ID is required');
   if (!config.sheetTab) throw new Error('Worksheet/tab name is required');
@@ -269,14 +312,23 @@ function assertValidConfig(config) {
   if (!/^\d{2}:\d{2}$/.test(config.scheduleTime)) {
     throw new Error('Schedule time must use HH:mm format');
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(config.startDate)) {
-    throw new Error('Start date must use YYYY-MM-DD format');
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(config.endDate)) {
-    throw new Error('End date must use YYYY-MM-DD format');
-  }
-  const { start, end } = getSyncWindow(config);
-  if (start > end) throw new Error('Start date must be before or equal to end date');
+  assertDateRange('Content tab', config.contentStartDate || config.startDate, config.contentEndDate || config.endDate);
+  assertDateRange('Follower tab', config.followerStartDate || config.startDate, config.followerEndDate || config.endDate);
+}
+
+function normalizeRunTarget(value) {
+  const target = String(value || 'both').toLowerCase();
+  if (target === 'content') return 'content';
+  if (target === 'follower' || target === 'followers') return 'followers';
+  return 'both';
+}
+
+function targetIncludesContent(target) {
+  return target === 'both' || target === 'content';
+}
+
+function targetIncludesFollowers(target) {
+  return target === 'both' || target === 'followers';
 }
 
 async function saveSecretPatch(configId, secrets = {}) {
@@ -2620,26 +2672,39 @@ async function runSync({
   preview = false,
   source = 'manual',
   configOverride = null,
+  target = 'both',
 } = {}) {
   const configSnap = await db().collection('sync_configs').doc(configId).get();
   if (!configSnap.exists && !configOverride) throw new Error('Sync config has not been saved yet');
   const config = normalizeConfig(configOverride || configSnap.data());
   assertValidConfig(config);
+  const syncTarget = normalizeRunTarget(target);
+  const contentConfig = configForDateScope(config, 'content');
+  const followerConfig = configForDateScope(config, 'followers');
+  const shouldRunContent = targetIncludesContent(syncTarget);
+  const shouldRunFollowers = targetIncludesFollowers(syncTarget);
 
   const runRef = db().collection('sync_runs').doc();
   await runRef.set({
     configId,
     source,
+    target: syncTarget,
     preview,
     status: 'running',
     startedAt: FieldValue.serverTimestamp(),
   });
 
   try {
-    if (!preview) await ensureSheetHeaders(configId, config);
-    const discovered = await discoverRows(configId, config);
-    const writeResult = await applyRowsToSheet(configId, config, discovered.rows, preview);
-    const followerResult = await syncFollowerSheet(configId, config, preview);
+    if (!preview && shouldRunContent) await ensureSheetHeaders(configId, contentConfig);
+    const discovered = shouldRunContent
+      ? await discoverRows(configId, contentConfig)
+      : { rows: [], errors: [], instagramDebug: [] };
+    const writeResult = shouldRunContent
+      ? await applyRowsToSheet(configId, contentConfig, discovered.rows, preview)
+      : { appended: 0, updated: 0, previewRows: [] };
+    const followerResult = shouldRunFollowers
+      ? await syncFollowerSheet(configId, followerConfig, preview)
+      : { appended: 0, updated: 0, previewRows: [], accounts: [], errors: [] };
     const allErrors = [
       ...discovered.errors,
       ...followerResult.errors,
@@ -2649,6 +2714,7 @@ async function runSync({
     await runRef.set({
       status,
       finishedAt: FieldValue.serverTimestamp(),
+      target: syncTarget,
       discovered: discovered.rows.length,
       rowsAppended: writeResult.appended,
       rowsUpdated: writeResult.updated,
@@ -2672,6 +2738,7 @@ async function runSync({
       ok: true,
       runId: runRef.id,
       status,
+      target: syncTarget,
       discovered: discovered.rows.length,
       rowsAppended: writeResult.appended,
       rowsUpdated: writeResult.updated,
@@ -2760,6 +2827,7 @@ export const runSheetSync = onRequest({ cors: true, timeoutSeconds: 540, maxInst
       preview: Boolean(req.body?.preview),
       source: req.body?.preview ? 'preview' : 'manual',
       configOverride,
+      target: req.body?.target,
     });
     res.status(200).json(result);
   } catch (error) {

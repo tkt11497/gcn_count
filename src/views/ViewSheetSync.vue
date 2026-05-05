@@ -60,21 +60,46 @@
           </label>
         </div>
 
-        <div class="two-col">
-          <label>
-            Start date
-            <input v-model="form.startDate" type="date" />
-          </label>
-          <label>
-            End date
-            <input v-model="form.endDate" type="date" />
-          </label>
+        <div class="tab-date-grid">
+          <div class="date-group">
+            <div class="date-group-title">
+              <span>Content tab date duration</span>
+              <strong>{{ contentWindowLabel }}</strong>
+            </div>
+            <div class="two-col">
+              <label>
+                Start date
+                <input v-model="form.contentStartDate" type="date" />
+              </label>
+              <label>
+                End date
+                <input v-model="form.contentEndDate" type="date" />
+              </label>
+            </div>
+          </div>
+
+          <div class="date-group">
+            <div class="date-group-title">
+              <span>Follower tab date duration</span>
+              <strong>{{ followerWindowLabel }}</strong>
+            </div>
+            <div class="two-col">
+              <label>
+                Start date
+                <input v-model="form.followerStartDate" type="date" />
+              </label>
+              <label>
+                End date
+                <input v-model="form.followerEndDate" type="date" />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="two-col">
           <div class="date-summary">
-            <span>Sync window</span>
-            <strong>{{ syncWindowLabel }}</strong>
+            <span>Saved windows</span>
+            <strong>Content and follower tabs run independently</strong>
           </div>
           <label class="switch-row">
             <input v-model="form.scheduleEnabled" type="checkbox" />
@@ -263,9 +288,41 @@
         <h2>Run Controls</h2>
         <span>{{ runningLabel }}</span>
       </div>
-      <div class="actions">
-        <button :disabled="busy" @click="previewSync">Preview Sync</button>
-        <button :disabled="busy" @click="runSync">Run Now</button>
+      <div class="run-control-list">
+        <div class="run-control-row">
+          <div>
+            <strong>Both tabs</strong>
+            <small>Content: {{ contentWindowLabel }} | Followers: {{ followerWindowLabel }}</small>
+          </div>
+          <div class="actions">
+            <button :disabled="busy" @click="previewSync('both')">Preview Both</button>
+            <button :disabled="busy" @click="runSync('both')">Run Both</button>
+          </div>
+        </div>
+
+        <div class="run-control-row">
+          <div>
+            <strong>Content tab</strong>
+            <small>{{ contentWindowLabel }}</small>
+          </div>
+          <div class="actions">
+            <button class="secondary" :disabled="busy" @click="previewSync('content')">Preview Content</button>
+            <button :disabled="busy" @click="runSync('content')">Run Content</button>
+          </div>
+        </div>
+
+        <div class="run-control-row">
+          <div>
+            <strong>Follower tab</strong>
+            <small>{{ followerWindowLabel }}</small>
+          </div>
+          <div class="actions">
+            <button class="secondary" :disabled="busy" @click="previewSync('followers')">Preview Followers</button>
+            <button :disabled="busy" @click="runSync('followers')">Run Followers</button>
+          </div>
+        </div>
+      </div>
+      <div class="actions oauth-actions">
         <button class="secondary" :disabled="busy" @click="connectInstagram">Connect Instagram</button>
         <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
         <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
@@ -355,7 +412,7 @@
         <article v-for="run in runs" :key="run.id" class="run-card">
           <div>
             <strong>{{ run.status || 'unknown' }}</strong>
-            <small>{{ formatTimestamp(run.startedAt) }} - {{ run.source || 'manual' }}</small>
+            <small>{{ formatTimestamp(run.startedAt) }} - {{ run.source || 'manual' }} - {{ runTargetLabel(run.target) }}</small>
           </div>
           <div class="run-metrics">
             <span>{{ run.discovered || 0 }} found</span>
@@ -401,6 +458,7 @@ const FUNCTION_ENDPOINTS = {
 }
 
 const busy = ref(false)
+const busyTarget = ref('')
 const message = ref('')
 const messageType = ref('info')
 const previewRows = ref([])
@@ -434,6 +492,10 @@ const form = reactive({
   scheduleEnabled: false,
   startDate: defaultStartDate(),
   endDate: defaultEndDate(),
+  contentStartDate: defaultStartDate(),
+  contentEndDate: defaultEndDate(),
+  followerStartDate: defaultStartDate(),
+  followerEndDate: defaultEndDate(),
   enabledPlatforms: {
     facebook: true,
     instagram: true,
@@ -467,7 +529,7 @@ const latestRunDetails = computed(() => {
   if (!latestRun.value) return 'Save config, then run a preview.'
   return `${latestRun.value.rowsAppended || 0} appended, ${latestRun.value.rowsUpdated || 0} updated`
 })
-const runningLabel = computed(() => busy.value ? 'Working' : 'Ready')
+const runningLabel = computed(() => busy.value ? `Working ${busyTarget.value || ''}`.trim() : 'Ready')
 const allFacebookSelected = computed(() => allSelected('facebook'))
 const allInstagramSelected = computed(() => allSelected('instagram'))
 const allYouTubeSelected = computed(() => allSelected('youtube'))
@@ -480,10 +542,8 @@ const accountSummary = computed(() => {
     + form.selectedAccounts.tiktok.length
   return total ? `${total} selected` : 'All connected accounts'
 })
-const syncWindowLabel = computed(() => {
-  if (!form.startDate || !form.endDate) return 'Choose start and end date'
-  return `${form.startDate} to ${form.endDate}`
-})
+const contentWindowLabel = computed(() => dateWindowLabel(form.contentStartDate, form.contentEndDate))
+const followerWindowLabel = computed(() => dateWindowLabel(form.followerStartDate, form.followerEndDate))
 
 async function authHeaders() {
   const user = auth.currentUser
@@ -500,6 +560,34 @@ function setMessage(text, type = 'info') {
   messageType.value = type
 }
 
+function dateWindowLabel(startDate, endDate) {
+  if (!startDate || !endDate) return 'Choose start and end date'
+  return `${startDate} to ${endDate}`
+}
+
+function normalizeTarget(target = 'both') {
+  if (target === 'content') return 'content'
+  if (target === 'followers' || target === 'follower') return 'followers'
+  return 'both'
+}
+
+function targetIncludesContent(target) {
+  const normalized = normalizeTarget(target)
+  return normalized === 'both' || normalized === 'content'
+}
+
+function targetIncludesFollowers(target) {
+  const normalized = normalizeTarget(target)
+  return normalized === 'both' || normalized === 'followers'
+}
+
+function runTargetLabel(target = 'both') {
+  const normalized = normalizeTarget(target)
+  if (normalized === 'content') return 'content tab'
+  if (normalized === 'followers') return 'follower tab'
+  return 'both tabs'
+}
+
 function syncErrorText(errors = []) {
   if (!Array.isArray(errors) || !errors.length) return ''
   return errors
@@ -512,6 +600,14 @@ function cleanSecretsPayload() {
   return Object.fromEntries(
     Object.entries(secrets).filter(([, value]) => String(value || '').trim())
   )
+}
+
+function configPayload() {
+  return {
+    ...form,
+    startDate: form.contentStartDate,
+    endDate: form.contentEndDate
+  }
 }
 
 async function postJson(url, body = {}) {
@@ -531,6 +627,10 @@ async function loadConfig() {
   const snap = await getDoc(doc(db, 'sync_configs', CONFIG_ID))
   if (!snap.exists()) return
   const data = snap.data()
+  const contentStartDate = data.contentStartDate || data.startDate || fallbackStartDate(data.lookbackDays)
+  const contentEndDate = data.contentEndDate || data.endDate || defaultEndDate()
+  const followerStartDate = data.followerStartDate || data.startDate || contentStartDate
+  const followerEndDate = data.followerEndDate || data.endDate || contentEndDate
   Object.assign(form, {
     sheetId: data.sheetId || '',
     sheetTab: data.sheetTab || 'Sheet1',
@@ -539,8 +639,12 @@ async function loadConfig() {
     timezone: data.timezone || 'Asia/Rangoon',
     scheduleTime: data.scheduleTime || '09:00',
     scheduleEnabled: Boolean(data.scheduleEnabled),
-    startDate: data.startDate || fallbackStartDate(data.lookbackDays),
-    endDate: data.endDate || defaultEndDate(),
+    startDate: contentStartDate,
+    endDate: contentEndDate,
+    contentStartDate,
+    contentEndDate,
+    followerStartDate,
+    followerEndDate,
     enabledPlatforms: {
       facebook: data.enabledPlatforms?.facebook !== false,
       instagram: data.enabledPlatforms?.instagram !== false,
@@ -622,7 +726,7 @@ async function saveConfig() {
     const secretsPayload = cleanSecretsPayload()
     await postJson(FUNCTION_ENDPOINTS.saveConfig, {
       configId: CONFIG_ID,
-      config: form,
+      config: configPayload(),
       secrets: secretsPayload
     })
     Object.keys(secrets).forEach((key) => { secrets[key] = '' })
@@ -650,8 +754,34 @@ async function testSheet() {
   }
 }
 
-async function previewSync() {
+function previewMessage(result, target) {
+  const parts = []
+  if (targetIncludesContent(target)) {
+    parts.push(`${result.discovered || 0} content rows discovered`)
+  }
+  if (targetIncludesFollowers(target)) {
+    parts.push(`${followerPreviewRows.value.length} follower rows ready`)
+  }
+  return parts.join(', ')
+}
+
+function runMessage(result, target) {
+  const parts = []
+  if (targetIncludesContent(target)) {
+    parts.push(`${result.rowsAppended || 0} appended`)
+    parts.push(`${result.rowsUpdated || 0} updated`)
+  }
+  if (targetIncludesFollowers(target)) {
+    const followerRows = (result.followerRowsAppended || 0) + (result.followerRowsUpdated || 0)
+    parts.push(`${followerRows} follower rows saved`)
+  }
+  return parts.join(', ')
+}
+
+async function previewSync(target = 'both') {
+  const normalizedTarget = normalizeTarget(target)
   busy.value = true
+  busyTarget.value = runTargetLabel(normalizedTarget)
   setMessage('')
   previewRows.value = []
   followerPreviewRows.value = []
@@ -660,34 +790,38 @@ async function previewSync() {
     const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
       configId: CONFIG_ID,
       preview: true,
-      config: form
+      target: normalizedTarget,
+      config: configPayload()
     })
     previewRows.value = result.previewRows || []
     followerPreviewRows.value = result.followerPreviewRows || []
     instagramDebugRows.value = result.instagramDebug || []
     const errors = syncErrorText(result.errors)
-    setMessage(`Preview complete: ${result.discovered || 0} content rows discovered, ${followerPreviewRows.value.length} follower rows ready.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
+    setMessage(`Preview ${runTargetLabel(normalizedTarget)} complete: ${previewMessage(result, normalizedTarget)}.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
     await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {
     busy.value = false
+    busyTarget.value = ''
   }
 }
 
-async function runSync() {
+async function runSync(target = 'both') {
+  const normalizedTarget = normalizeTarget(target)
   busy.value = true
+  busyTarget.value = runTargetLabel(normalizedTarget)
   setMessage('')
   instagramDebugRows.value = []
   try {
     const result = await postJson(FUNCTION_ENDPOINTS.runSync, {
       configId: CONFIG_ID,
-      config: form
+      target: normalizedTarget,
+      config: configPayload()
     })
-    const followerRows = (result.followerRowsAppended || 0) + (result.followerRowsUpdated || 0)
     instagramDebugRows.value = result.instagramDebug || []
     const errors = syncErrorText(result.errors)
-    setMessage(`Sync complete: ${result.rowsAppended || 0} appended, ${result.rowsUpdated || 0} updated, ${followerRows} follower rows saved.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
+    setMessage(`Sync ${runTargetLabel(normalizedTarget)} complete: ${runMessage(result, normalizedTarget)}.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
     previewRows.value = []
     followerPreviewRows.value = []
     await Promise.all([loadRuns(), loadAccounts()])
@@ -695,6 +829,7 @@ async function runSync() {
     setMessage(error.message, 'error')
   } finally {
     busy.value = false
+    busyTarget.value = ''
   }
 }
 
@@ -892,6 +1027,37 @@ textarea:focus {
   grid-template-columns: 1fr 1fr;
 }
 
+.tab-date-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.date-group {
+  border: 1px solid #34445f;
+  border-radius: 8px;
+  padding: 14px 14px 0;
+}
+
+.date-group-title {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.date-group-title span,
+.run-control-row small {
+  color: #99a8bc;
+  font-size: 0.82rem;
+}
+
+.date-group-title strong,
+.run-control-row strong {
+  color: #dbe7f5;
+}
+
 .switch-row {
   align-items: center;
   display: flex;
@@ -955,6 +1121,39 @@ button:disabled {
 
 .controls-panel {
   display: block;
+}
+
+.run-control-list {
+  display: grid;
+  gap: 0;
+  margin-bottom: 16px;
+}
+
+.run-control-row {
+  align-items: center;
+  border-bottom: 1px solid #2b3a55;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px 0;
+}
+
+.run-control-row:first-child {
+  padding-top: 0;
+}
+
+.run-control-row:last-child {
+  border-bottom: 0;
+}
+
+.run-control-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.oauth-actions {
+  border-top: 1px solid #2b3a55;
+  padding-top: 16px;
 }
 
 .accounts-panel {
@@ -1137,6 +1336,7 @@ th {
   .sync-header,
   .sync-grid,
   .accounts-grid,
+  .run-control-row,
   .two-col {
     grid-template-columns: 1fr;
   }
