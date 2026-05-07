@@ -80,19 +80,41 @@
 
           <div class="date-group">
             <div class="date-group-title">
-              <span>Follower tab date duration</span>
+              <span>Follower tab date durations</span>
               <strong>{{ followerWindowLabel }}</strong>
             </div>
-            <div class="two-col">
-              <label>
-                Start date
-                <input v-model="form.followerStartDate" type="date" />
-              </label>
-              <label>
-                End date
-                <input v-model="form.followerEndDate" type="date" />
-              </label>
+            <div class="follower-range-list">
+              <div
+                v-for="(range, index) in form.followerDateRanges"
+                :key="range.id || index"
+                class="follower-range-row"
+              >
+                <div class="follower-range-heading">
+                  <span>Duration {{ index + 1 }}</span>
+                  <button
+                    v-if="form.followerDateRanges.length > 1"
+                    type="button"
+                    class="mini-btn danger"
+                    @click="removeFollowerDateRange(index)"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div class="two-col">
+                  <label>
+                    Start date
+                    <input v-model="range.startDate" type="date" />
+                  </label>
+                  <label>
+                    End date
+                    <input v-model="range.endDate" type="date" />
+                  </label>
+                </div>
+              </div>
             </div>
+            <button type="button" class="mini-btn add-range-btn" @click="addFollowerDateRange">
+              Add duration
+            </button>
           </div>
         </div>
 
@@ -482,6 +504,17 @@ function defaultEndDate() {
   return dateInputValue(new Date())
 }
 
+let followerRangeId = 0
+
+function makeFollowerDateRange(startDate = defaultStartDate(), endDate = defaultEndDate()) {
+  followerRangeId += 1
+  return {
+    id: `follower-range-${followerRangeId}`,
+    startDate,
+    endDate
+  }
+}
+
 const form = reactive({
   sheetId: '',
   sheetTab: 'Sheet1',
@@ -496,6 +529,7 @@ const form = reactive({
   contentEndDate: defaultEndDate(),
   followerStartDate: defaultStartDate(),
   followerEndDate: defaultEndDate(),
+  followerDateRanges: [makeFollowerDateRange()],
   enabledPlatforms: {
     facebook: true,
     instagram: true,
@@ -543,7 +577,14 @@ const accountSummary = computed(() => {
   return total ? `${total} selected` : 'All connected accounts'
 })
 const contentWindowLabel = computed(() => dateWindowLabel(form.contentStartDate, form.contentEndDate))
-const followerWindowLabel = computed(() => dateWindowLabel(form.followerStartDate, form.followerEndDate))
+const followerWindowLabel = computed(() => {
+  const count = normalizedFollowerDateRanges().length
+  if (count === 1) {
+    const range = normalizedFollowerDateRanges()[0]
+    return dateWindowLabel(range.startDate, range.endDate)
+  }
+  return `${count} durations`
+})
 
 async function authHeaders() {
   const user = auth.currentUser
@@ -563,6 +604,49 @@ function setMessage(text, type = 'info') {
 function dateWindowLabel(startDate, endDate) {
   if (!startDate || !endDate) return 'Choose start and end date'
   return `${startDate} to ${endDate}`
+}
+
+function followerDateRangePayload() {
+  const ranges = (Array.isArray(form.followerDateRanges) ? form.followerDateRanges : [])
+    .map((range) => ({
+      startDate: range.startDate || '',
+      endDate: range.endDate || ''
+    }))
+  return ranges.length ? ranges : [{
+    startDate: form.followerStartDate || defaultStartDate(),
+    endDate: form.followerEndDate || defaultEndDate()
+  }]
+}
+
+function normalizedFollowerDateRanges() {
+  const ranges = followerDateRangePayload()
+    .filter((range) => range.startDate && range.endDate)
+  return ranges.length ? ranges : [{
+    startDate: form.followerStartDate || defaultStartDate(),
+    endDate: form.followerEndDate || defaultEndDate()
+  }]
+}
+
+function syncLegacyFollowerDates() {
+  const firstRange = normalizedFollowerDateRanges()[0]
+  form.followerStartDate = firstRange.startDate
+  form.followerEndDate = firstRange.endDate
+}
+
+function addFollowerDateRange() {
+  const ranges = normalizedFollowerDateRanges()
+  const lastRange = ranges[ranges.length - 1] || {}
+  form.followerDateRanges.push(makeFollowerDateRange(
+    lastRange.startDate || defaultStartDate(),
+    lastRange.endDate || defaultEndDate()
+  ))
+  syncLegacyFollowerDates()
+}
+
+function removeFollowerDateRange(index) {
+  if (form.followerDateRanges.length <= 1) return
+  form.followerDateRanges.splice(index, 1)
+  syncLegacyFollowerDates()
 }
 
 function normalizeTarget(target = 'both') {
@@ -603,10 +687,15 @@ function cleanSecretsPayload() {
 }
 
 function configPayload() {
+  const followerDateRanges = followerDateRangePayload()
+  const firstFollowerRange = followerDateRanges[0]
   return {
     ...form,
     startDate: form.contentStartDate,
-    endDate: form.contentEndDate
+    endDate: form.contentEndDate,
+    followerStartDate: firstFollowerRange.startDate,
+    followerEndDate: firstFollowerRange.endDate,
+    followerDateRanges
   }
 }
 
@@ -631,6 +720,19 @@ async function loadConfig() {
   const contentEndDate = data.contentEndDate || data.endDate || defaultEndDate()
   const followerStartDate = data.followerStartDate || data.startDate || contentStartDate
   const followerEndDate = data.followerEndDate || data.endDate || contentEndDate
+  const savedFollowerRanges = Array.isArray(data.followerDateRanges)
+    ? data.followerDateRanges
+      .map((range) => ({
+        startDate: range?.startDate || '',
+        endDate: range?.endDate || ''
+      }))
+      .filter((range) => range.startDate && range.endDate)
+    : []
+  const followerDateRanges = (savedFollowerRanges.length
+    ? savedFollowerRanges
+    : [{ startDate: followerStartDate, endDate: followerEndDate }]
+  ).map((range) => makeFollowerDateRange(range.startDate, range.endDate))
+  const firstFollowerRange = followerDateRanges[0] || makeFollowerDateRange(followerStartDate, followerEndDate)
   Object.assign(form, {
     sheetId: data.sheetId || '',
     sheetTab: data.sheetTab || 'Sheet1',
@@ -643,8 +745,9 @@ async function loadConfig() {
     endDate: contentEndDate,
     contentStartDate,
     contentEndDate,
-    followerStartDate,
-    followerEndDate,
+    followerStartDate: firstFollowerRange.startDate,
+    followerEndDate: firstFollowerRange.endDate,
+    followerDateRanges,
     enabledPlatforms: {
       facebook: data.enabledPlatforms?.facebook !== false,
       instagram: data.enabledPlatforms?.instagram !== false,
@@ -1056,6 +1159,37 @@ textarea:focus {
 .date-group-title strong,
 .run-control-row strong {
   color: #dbe7f5;
+}
+
+.follower-range-list {
+  display: grid;
+  gap: 12px;
+}
+
+.follower-range-row {
+  background: #0f1727;
+  border: 1px solid #2b3a55;
+  border-radius: 8px;
+  padding: 12px 12px 0;
+}
+
+.follower-range-heading {
+  align-items: center;
+  color: #99a8bc;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.add-range-btn {
+  margin-top: 12px;
+}
+
+.mini-btn.danger {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
 }
 
 .switch-row {

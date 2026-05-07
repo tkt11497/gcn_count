@@ -212,10 +212,16 @@ function getSyncWindow(config) {
 
 function configForDateScope(config, scope) {
   if (scope === 'followers') {
-    return {
-      ...config,
+    const ranges = getFollowerDateRanges(config);
+    const firstRange = ranges[0] || {
       startDate: config.followerStartDate || config.startDate,
       endDate: config.followerEndDate || config.endDate,
+    };
+    return {
+      ...config,
+      startDate: firstRange.startDate,
+      endDate: firstRange.endDate,
+      followerDateRanges: ranges,
     };
   }
 
@@ -224,6 +230,45 @@ function configForDateScope(config, scope) {
     startDate: config.contentStartDate || config.startDate,
     endDate: config.contentEndDate || config.endDate,
   };
+}
+
+function normalizeFollowerDateRanges(input = {}, fallbackStartDate, fallbackEndDate) {
+  const rawRanges = Array.isArray(input.followerDateRanges) ? input.followerDateRanges : [];
+  if (rawRanges.length) {
+    return rawRanges.map((range) => ({
+      startDate: isoDateOnly(range?.startDate),
+      endDate: isoDateOnly(range?.endDate),
+    }));
+  }
+
+  return [{
+    startDate: isoDateOnly(input.followerStartDate) || fallbackStartDate,
+    endDate: isoDateOnly(input.followerEndDate) || fallbackEndDate,
+  }];
+}
+
+function getFollowerDateRanges(config = {}) {
+  const ranges = Array.isArray(config.followerDateRanges) ? config.followerDateRanges : [];
+  const normalized = ranges
+    .map((range) => ({
+      startDate: isoDateOnly(range?.startDate),
+      endDate: isoDateOnly(range?.endDate),
+    }))
+    .filter((range) => range.startDate && range.endDate);
+
+  if (normalized.length) return normalized;
+  return [{
+    startDate: isoDateOnly(config.followerStartDate || config.startDate) || defaultStartDate(),
+    endDate: isoDateOnly(config.followerEndDate || config.endDate) || defaultEndDate(),
+  }];
+}
+
+function followerTargetDates(config = {}) {
+  return Array.from(new Set(
+    getFollowerDateRanges(config)
+      .flatMap((range) => [range.startDate, range.endDate])
+      .filter(Boolean),
+  ));
 }
 
 function normalizeConfig(input = {}) {
@@ -237,6 +282,11 @@ function normalizeConfig(input = {}) {
   const contentEndDate = isoDateOnly(input.contentEndDate) || legacyEndDate;
   const followerStartDate = isoDateOnly(input.followerStartDate) || legacyStartDate;
   const followerEndDate = isoDateOnly(input.followerEndDate) || legacyEndDate;
+  const followerDateRanges = normalizeFollowerDateRanges(input, followerStartDate, followerEndDate);
+  const firstFollowerRange = followerDateRanges[0] || {
+    startDate: followerStartDate,
+    endDate: followerEndDate,
+  };
 
   const normalized = {
     sheetId: String(input.sheetId || '').trim(),
@@ -250,8 +300,9 @@ function normalizeConfig(input = {}) {
     endDate: contentEndDate,
     contentStartDate,
     contentEndDate,
-    followerStartDate,
-    followerEndDate,
+    followerStartDate: firstFollowerRange.startDate,
+    followerEndDate: firstFollowerRange.endDate,
+    followerDateRanges,
     enabledPlatforms: {
       facebook: input.enabledPlatforms?.facebook !== false,
       instagram: input.enabledPlatforms?.instagram !== false,
@@ -313,7 +364,9 @@ function assertValidConfig(config) {
     throw new Error('Schedule time must use HH:mm format');
   }
   assertDateRange('Content tab', config.contentStartDate || config.startDate, config.contentEndDate || config.endDate);
-  assertDateRange('Follower tab', config.followerStartDate || config.startDate, config.followerEndDate || config.endDate);
+  getFollowerDateRanges(config).forEach((range, index) => {
+    assertDateRange(`Follower tab range ${index + 1}`, range.startDate, range.endDate);
+  });
 }
 
 function normalizeRunTarget(value) {
@@ -2185,6 +2238,8 @@ async function getFacebookFollowerAccounts(config) {
   const accounts = [];
   const pagesSnap = await db().collection('pages').get();
   const selectedPageIds = new Set(config.selectedAccounts?.facebook || []);
+  const targetDates = followerTargetDates(config);
+  const firstRange = getFollowerDateRanges(config)[0];
 
   for (const pageDoc of pagesSnap.docs) {
     const page = { id: pageDoc.id, ...pageDoc.data() };
@@ -2196,22 +2251,33 @@ async function getFacebookFollowerAccounts(config) {
         fields: 'name,followers_count,fan_count',
       });
       const followers = nullableNumber(data?.followers_count) ?? nullableNumber(data?.fan_count);
-      let startInsight = null;
-      let endInsight = null;
-      try {
-        [startInsight, endInsight] = await Promise.all([
-          getFacebookFollowerCountForDate(page.id, page.access_token, config.startDate, config.timezone),
-          getFacebookFollowerCountForDate(page.id, page.access_token, config.endDate, config.timezone),
-        ]);
-      } catch (insightError) {
-        errors.push({
-          platform: 'facebook',
-          accountId: page.id,
-          message: `Facebook follower insights unavailable: ${insightError.message}`,
-        });
-      }
+      const followerCountsByDate = {};
+      await Promise.all(targetDates.map(async (targetDate) => {
+        try {
+          const insight = await getFacebookFollowerCountForDate(
+            page.id,
+            page.access_token,
+            targetDate,
+            config.timezone,
+          );
+          if (insight?.followers !== null && insight?.followers !== undefined) {
+            followerCountsByDate[targetDate] = {
+              followers: insight.followers,
+              sourceDate: insight.date || '',
+            };
+          }
+        } catch (insightError) {
+          errors.push({
+            platform: 'facebook',
+            accountId: page.id,
+            message: `Facebook follower insights unavailable for ${targetDate}: ${insightError.message}`,
+          });
+        }
+      }));
 
       if (followers !== null) {
+        const startInsight = followerCountsByDate[firstRange?.startDate] || null;
+        const endInsight = followerCountsByDate[firstRange?.endDate] || null;
         accounts.push({
           platform: 'Facebook',
           platformKey: 'facebook',
@@ -2219,9 +2285,12 @@ async function getFacebookFollowerAccounts(config) {
           accountName: data?.name || page.name || page.id,
           followers,
           startFollowers: startInsight?.followers ?? null,
-          startFollowersSourceDate: startInsight?.date || '',
+          startFollowersSourceDate: startInsight?.sourceDate || '',
+          startFollowersTargetDate: firstRange?.startDate || '',
           endFollowers: endInsight?.followers ?? null,
-          endFollowersSourceDate: endInsight?.date || '',
+          endFollowersSourceDate: endInsight?.sourceDate || '',
+          endFollowersTargetDate: firstRange?.endDate || '',
+          followerCountsByDate,
         });
       }
     } catch (error) {
@@ -2259,6 +2328,8 @@ async function getYouTubeSubscriberAccounts(configId, config) {
   const accounts = [];
   const channelsSnap = await db().collection('youtube_channels').get();
   const selectedChannelIds = new Set(config.selectedAccounts?.youtube || []);
+  const targetDates = followerTargetDates(config);
+  const firstRange = getFollowerDateRanges(config)[0];
 
   for (const channelDoc of channelsSnap.docs) {
     const channel = { id: channelDoc.id, ...channelDoc.data() };
@@ -2274,22 +2345,32 @@ async function getYouTubeSubscriberAccounts(configId, config) {
       const connectedChannel = data?.items?.[0];
       const subscribers = nullableNumber(connectedChannel?.statistics?.subscriberCount);
       if (subscribers !== null) {
-        const [startSubscribers, endSubscribers] = await Promise.all([
-          estimateYouTubeSubscribersOnDate(
-            accessToken,
-            connectedChannel.id,
-            subscribers,
-            config.startDate,
-            config.timezone,
-          ),
-          estimateYouTubeSubscribersOnDate(
-            accessToken,
-            connectedChannel.id,
-            subscribers,
-            config.endDate,
-            config.timezone,
-          ),
-        ]);
+        const followerCountsByDate = {};
+        await Promise.all(targetDates.map(async (targetDate) => {
+          try {
+            const estimate = await estimateYouTubeSubscribersOnDate(
+              accessToken,
+              connectedChannel.id,
+              subscribers,
+              targetDate,
+              config.timezone,
+            );
+            if (estimate?.followers !== null && estimate?.followers !== undefined) {
+              followerCountsByDate[targetDate] = {
+                followers: estimate.followers,
+                sourceDate: estimate.sourceDate || targetDate,
+              };
+            }
+          } catch (estimateError) {
+            errors.push({
+              platform: 'youtube',
+              accountId: channel.id,
+              message: `YouTube subscriber estimate unavailable for ${targetDate}: ${estimateError.message}`,
+            });
+          }
+        }));
+        const startSubscribers = followerCountsByDate[firstRange?.startDate] || null;
+        const endSubscribers = followerCountsByDate[firstRange?.endDate] || null;
         accounts.push({
           platform: 'YouTube',
           platformKey: 'youtube',
@@ -2298,8 +2379,11 @@ async function getYouTubeSubscriberAccounts(configId, config) {
           followers: subscribers,
           startFollowers: startSubscribers?.followers ?? null,
           startFollowersSourceDate: startSubscribers?.sourceDate || '',
+          startFollowersTargetDate: firstRange?.startDate || '',
           endFollowers: endSubscribers?.followers ?? null,
           endFollowersSourceDate: endSubscribers?.sourceDate || '',
+          endFollowersTargetDate: firstRange?.endDate || '',
+          followerCountsByDate,
         });
       }
     } catch (error) {
@@ -2411,11 +2495,16 @@ function observationDocId(configId, key, date) {
 
 async function saveFollowerObservations(configId, config, accounts) {
   const observationDate = localDateString(new Date(), config.timezone);
-  const writes = accounts.map((account) => {
+  const seenDocIds = new Set();
+  const writes = [];
+  for (const account of accounts) {
     const key = followerAccountKey(account.platformKey, account.accountId);
+    const docId = observationDocId(configId, key, observationDate);
+    if (seenDocIds.has(docId)) continue;
+    seenDocIds.add(docId);
     const snapshotRef = db().collection('follower_observations')
-      .doc(observationDocId(configId, key, observationDate));
-    return {
+      .doc(docId);
+    writes.push({
       snapshotRef,
       payload: {
         configId,
@@ -2430,8 +2519,8 @@ async function saveFollowerObservations(configId, config, accounts) {
         observedOnDate: observationDate,
         observedAt: FieldValue.serverTimestamp(),
       },
-    };
-  });
+    });
+  }
   await commitSnapshotWrites(writes);
 }
 
@@ -2478,8 +2567,18 @@ async function followerDateValues(configId, config, accounts) {
     const startObservation = closestObservationOnOrBefore(records, key, config.startDate);
     const endObservation = closestObservationOnOrBefore(records, key, config.endDate);
     const currentFollowers = nullableNumber(account.followers);
-    const accountStartFollowers = nullableNumber(account.startFollowers);
-    const accountEndFollowers = nullableNumber(account.endFollowers);
+    const directStart = account.followerCountsByDate?.[config.startDate];
+    const directEnd = account.followerCountsByDate?.[config.endDate];
+    const accountStartFollowers = directStart
+      ? nullableNumber(directStart.followers)
+      : account.startFollowersTargetDate === config.startDate
+        ? nullableNumber(account.startFollowers)
+        : null;
+    const accountEndFollowers = directEnd
+      ? nullableNumber(directEnd.followers)
+      : account.endFollowersTargetDate === config.endDate
+        ? nullableNumber(account.endFollowers)
+        : null;
     const startIsCurrent = isCurrentLocalDate(config.startDate, config.timezone);
     const endIsCurrent = isCurrentLocalDate(config.endDate, config.timezone);
     result[key] = {
@@ -2487,7 +2586,8 @@ async function followerDateValues(configId, config, accounts) {
         ?? (startIsCurrent
         ? currentFollowers
         : startObservation?.followers ?? null),
-      startSourceDate: account.startFollowersSourceDate
+      startSourceDate: directStart?.sourceDate
+        || (account.startFollowersTargetDate === config.startDate ? account.startFollowersSourceDate : '')
         || (startIsCurrent
         ? localDateString(new Date(), config.timezone)
         : startObservation?.date || ''),
@@ -2495,7 +2595,8 @@ async function followerDateValues(configId, config, accounts) {
         ?? (endIsCurrent
         ? currentFollowers
         : endObservation?.followers ?? null),
-      endSourceDate: account.endFollowersSourceDate
+      endSourceDate: directEnd?.sourceDate
+        || (account.endFollowersTargetDate === config.endDate ? account.endFollowersSourceDate : '')
         || (endIsCurrent
         ? localDateString(new Date(), config.timezone)
         : endObservation?.date || ''),
@@ -2578,8 +2679,16 @@ async function writeFollowerSheet(configId, config, rows) {
 
 async function syncFollowerSheet(configId, config, preview = false) {
   const discovered = await discoverFollowerAccounts(configId, config);
-  const dateValues = await followerDateValues(configId, config, discovered.accounts);
-  const rows = followerRows(config, discovered.accounts, dateValues);
+  const rows = [];
+  for (const range of getFollowerDateRanges(config)) {
+    const rangeConfig = {
+      ...config,
+      startDate: range.startDate,
+      endDate: range.endDate,
+    };
+    const dateValues = await followerDateValues(configId, rangeConfig, discovered.accounts);
+    rows.push(...followerRows(rangeConfig, discovered.accounts, dateValues));
+  }
 
   if (preview) {
     return {
