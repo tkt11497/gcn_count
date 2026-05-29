@@ -3,7 +3,7 @@
     <div class="hero-logo" :class="{ 'logo-active': isActive || isStopped }">
       <img src="@/assets/image/msl_logo.png" alt="MSL Logo" class="msl-logo" />
       <div class="logo-text-section" v-if="isActive || isStopped">
-        <div class="league-name">MLBB SUPER LEAGUE MYANMAR <span class="season-text">SEASON 2</span></div>
+        <div class="league-name">MSL MYANMAR <span class="season-text">SEASON 3</span></div>
         <div class="challenge-title">
           <span class="title-white">RETRIBUTION</span>
           <span class="title-red">CHALLENAGE</span>
@@ -19,8 +19,8 @@
       <!-- Game Title -->
       <div class="game-header" v-if="!isActive && !isStopped">
         <div class="header-logos">
-          <div class="logo-text">MLBB Super League</div>
-          <div class="logo-text">SEASON 2</div>
+          <div class="logo-text">MSL MYANMAR</div>
+          <div class="logo-text">SEASON 3</div>
         </div>
         <div class="header-supertitle">♦ ♦ Retri Challenge ♦ ♦</div>
         <h1 class="game-title"> သင် Retri<br />ဘယ်လောက်ကျွမ်းလဲ?</h1>
@@ -74,7 +74,7 @@
         <div class="result-content">
           <div class="result-title-section">
             <div class="result-title-en" v-if="resultTitle === 'Enemy Steal the Lord'">
-              <div class="title-line-1">Enemy Steal</div>
+              <div class="title-line-1">Enemy Steals</div>
               <div class="title-line-2">The Lord</div>
             </div>
             <div class="result-title-en" v-else>
