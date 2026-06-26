@@ -12,14 +12,53 @@
         <span class="status-label">Last run</span>
         <strong>{{ latestRunLabel }}</strong>
         <small>{{ latestRunDetails }}</small>
+        <button type="button" class="mode-toggle" @click="showSettings = !showSettings">
+          {{ showSettings ? 'Hide Settings' : 'Show Settings' }}
+        </button>
       </div>
     </section>
 
-    <section class="sync-grid">
+    <form v-if="!showSettings" class="sync-panel quick-sheet-panel" @submit.prevent="saveConfig">
+      <div class="panel-title">
+        <div>
+          <h2>Add Google Sheet</h2>
+          <small>Paste the Sheet ID, keep the default tabs, then save or test the connection.</small>
+        </div>
+        <span>Simple mode</span>
+      </div>
+
+      <div class="quick-sheet-grid">
+        <label class="sheet-id-field">
+          Google Sheet ID
+          <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
+        </label>
+        <label>
+          Content tab
+          <input v-model.trim="form.sheetTab" type="text" placeholder="Sheet1" />
+        </label>
+        <label>
+          Follower tab
+          <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" />
+        </label>
+      </div>
+
+      <div class="actions quick-actions">
+        <button type="submit" :disabled="busy">Save Sheet</button>
+        <button type="button" class="secondary" :disabled="busy" @click="testSheet">Test Sheet</button>
+        <button type="button" class="ghost" :disabled="busy" @click="openSecretsModal">Set Backend Secrets</button>
+        <button type="button" class="ghost" @click="showSettings = true">Advanced Settings</button>
+      </div>
+
+      <p class="hint">
+        Advanced settings include schedules, date windows, platform filters, account selection, and backend secret status.
+      </p>
+    </form>
+
+    <section v-if="showSettings" class="sync-grid">
       <form class="sync-panel" @submit.prevent="saveConfig">
         <div class="panel-title">
           <h2>Sheet Setup</h2>
-          <span>Required</span>
+          <button type="button" class="mini-btn" @click="showSettings = false">Simple mode</button>
         </div>
 
         <label>
@@ -36,17 +75,6 @@
             Follower tab
             <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" />
           </label>
-        </div>
-
-        <div class="two-col">
-          <label>
-            Header row
-            <input v-model.number="form.headerRow" type="number" min="1" />
-          </label>
-          <div class="date-summary">
-            <span>Follower sheet</span>
-            <strong>Before, total, and growth</strong>
-          </div>
         </div>
 
         <div class="two-col">
@@ -156,77 +184,9 @@
           <button type="button" class="secondary" :disabled="busy" @click="testSheet">Test Sheet</button>
         </div>
       </form>
-
-      <section class="sync-panel">
-        <div class="panel-title">
-          <h2>Backend Secrets</h2>
-          <span>Optional update</span>
-        </div>
-
-        <label>
-          Service account JSON
-          <textarea
-            v-model="secrets.googleServiceAccountJson"
-            rows="6"
-            placeholder='Paste the full downloaded Google service account JSON here'
-          ></textarea>
-        </label>
-
-        <div class="two-col">
-          <label>
-            Google OAuth client ID
-            <input v-model.trim="secrets.googleOAuthClientId" type="password" autocomplete="new-password" />
-          </label>
-          <label>
-            Google OAuth client secret
-            <input v-model.trim="secrets.googleOAuthClientSecret" type="password" autocomplete="new-password" />
-          </label>
-        </div>
-
-        <label>
-          YouTube redirect URI
-          <input v-model.trim="secrets.youtubeRedirectUri" type="text" :placeholder="YOUTUBE_REDIRECT_URI" />
-        </label>
-
-        <div class="two-col">
-          <label>
-            Instagram client ID
-            <input v-model.trim="secrets.instagramClientId" type="password" autocomplete="new-password" />
-          </label>
-          <label>
-            Instagram client secret
-            <input v-model.trim="secrets.instagramClientSecret" type="password" autocomplete="new-password" />
-          </label>
-        </div>
-
-        <label>
-          Instagram redirect URI
-          <input v-model.trim="secrets.instagramRedirectUri" type="text" :placeholder="INSTAGRAM_REDIRECT_URI" />
-        </label>
-
-        <div class="two-col">
-          <label>
-            TikTok client key
-            <input v-model.trim="secrets.tiktokClientKey" type="password" autocomplete="new-password" />
-          </label>
-          <label>
-            TikTok client secret
-            <input v-model.trim="secrets.tiktokClientSecret" type="password" autocomplete="new-password" />
-          </label>
-        </div>
-
-        <label>
-          TikTok redirect URI
-          <input v-model.trim="secrets.tiktokRedirectUri" type="text" :placeholder="TIKTOK_REDIRECT_URI" />
-        </label>
-
-        <p class="hint">
-          Create a Google Cloud service account, download its JSON key, share the target Sheet with its client_email, then paste the full JSON here and click Save Config.
-        </p>
-      </section>
     </section>
 
-    <section class="sync-panel accounts-panel">
+    <section v-if="showSettings" class="sync-panel accounts-panel">
       <div class="panel-title">
         <h2>Accounts for This Sheet</h2>
         <span>{{ accountSummary }}</span>
@@ -313,16 +273,17 @@
       <div class="run-control-list">
         <div class="run-control-row">
           <div>
-            <strong>Both tabs</strong>
-            <small>Content: {{ contentWindowLabel }} | Followers: {{ followerWindowLabel }}</small>
+            <strong>{{ showSettings ? 'Both tabs' : 'Sync sheet' }}</strong>
+            <small v-if="showSettings">Content: {{ contentWindowLabel }} | Followers: {{ followerWindowLabel }}</small>
+            <small v-else>{{ form.sheetId ? 'Preview or run the saved sheet configuration.' : 'Add a Google Sheet ID first.' }}</small>
           </div>
           <div class="actions">
-            <button :disabled="busy" @click="previewSync('both')">Preview Both</button>
-            <button :disabled="busy" @click="runSync('both')">Run Both</button>
+            <button :disabled="busy || !form.sheetId" @click="previewSync('both')">{{ showSettings ? 'Preview Both' : 'Preview' }}</button>
+            <button :disabled="busy || !form.sheetId" @click="runSync('both')">{{ showSettings ? 'Run Both' : 'Run Sync' }}</button>
           </div>
         </div>
 
-        <div class="run-control-row">
+        <div v-if="showSettings" class="run-control-row">
           <div>
             <strong>Content tab</strong>
             <small>{{ contentWindowLabel }}</small>
@@ -333,7 +294,7 @@
           </div>
         </div>
 
-        <div class="run-control-row">
+        <div v-if="showSettings" class="run-control-row">
           <div>
             <strong>Follower tab</strong>
             <small>{{ followerWindowLabel }}</small>
@@ -344,7 +305,7 @@
           </div>
         </div>
       </div>
-      <div class="actions oauth-actions">
+      <div v-if="showSettings" class="actions oauth-actions">
         <button class="secondary" :disabled="busy" @click="connectInstagram">Connect Instagram</button>
         <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
         <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
@@ -352,7 +313,7 @@
       <p v-if="message" class="message" :class="{ error: messageType === 'error' }">{{ message }}</p>
     </section>
 
-    <section v-if="instagramDebugRows.length" class="sync-panel debug-panel">
+    <section v-if="showSettings && instagramDebugRows.length" class="sync-panel debug-panel">
       <div class="panel-title">
         <h2>Instagram Debug</h2>
         <span>{{ instagramDebugRows.length }} events</span>
@@ -425,7 +386,7 @@
       </div>
     </section>
 
-    <section class="sync-panel">
+    <section v-if="showSettings" class="sync-panel">
       <div class="panel-title">
         <h2>Recent Runs</h2>
         <span>{{ runs.length }} loaded</span>
@@ -448,6 +409,163 @@
         </article>
       </div>
     </section>
+
+    <div v-if="showSecretsModal" class="modal-backdrop" @click.self="closeSecretsModal">
+      <section class="secret-modal" role="dialog" aria-modal="true" aria-labelledby="backend-secrets-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2 id="backend-secrets-title">Backend Secrets</h2>
+          </div>
+          <button type="button" class="ghost close-btn" @click="closeSecretsModal">Close</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="actions reveal-actions top">
+            <button
+              v-if="!showExistingSecrets"
+              type="button"
+              class="ghost"
+              @click="showExistingSecrets = true"
+            >
+              Show Existing Secrets
+            </button>
+            <button
+              v-else
+              type="button"
+              class="ghost"
+              @click="hideExistingSecrets"
+            >
+              Hide Existing Secrets
+            </button>
+          </div>
+
+          <section v-if="showExistingSecrets" class="existing-secrets">
+            <div class="panel-title">
+              <h2>Existing Secrets</h2>
+              <span>{{ secretStatusSummary }}</span>
+            </div>
+            <div class="secret-status-list">
+              <article
+                v-for="item in secretStatusItems"
+                :key="`modal-${item.name}`"
+                class="secret-status-item"
+                :class="{ configured: item.configured }"
+              >
+                <span class="status-dot"></span>
+                <div>
+                  <strong>{{ item.label }}</strong>
+                  <small>{{ secretStatusText(item) }}</small>
+                </div>
+              </article>
+            </div>
+            <p v-if="secretStatusUpdatedAt" class="hint">
+              Last saved secret update: {{ formatTimestamp(secretStatusUpdatedAt) }}
+            </p>
+            <div class="actions reveal-actions">
+              <button
+                v-if="!secretsRevealed"
+                type="button"
+                class="secondary"
+                :disabled="secretRevealLoading"
+                @click="revealBackendSecrets"
+              >
+                {{ secretRevealLoading ? 'Revealing...' : 'Reveal Secrets' }}
+              </button>
+              <button
+                v-else
+                type="button"
+                class="ghost"
+                @click="hideRevealedSecrets"
+              >
+                Hide Secrets
+              </button>
+            </div>
+          </section>
+
+          <form class="secrets-form" @submit.prevent="saveBackendSecrets">
+            <label>
+              Service account JSON
+              <textarea
+                v-model="secrets.googleServiceAccountJson"
+                rows="6"
+                placeholder="Paste the full downloaded Google service account JSON here"
+              ></textarea>
+            </label>
+
+            <div class="two-col">
+              <label>
+                YouTube API key
+                <input v-model.trim="secrets.youtubeApiKey" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+              <label>
+                Google OAuth client ID
+                <input v-model.trim="secrets.googleOAuthClientId" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+            </div>
+
+            <div class="two-col">
+              <label>
+                Google OAuth client secret
+                <input v-model.trim="secrets.googleOAuthClientSecret" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+              <label>
+                YouTube redirect URI
+                <input v-model.trim="secrets.youtubeRedirectUri" type="text" :placeholder="YOUTUBE_REDIRECT_URI" />
+              </label>
+            </div>
+
+            <div class="two-col">
+              <label>
+                Instagram client ID
+                <input v-model.trim="secrets.instagramClientId" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+              <label>
+                Instagram client secret
+                <input v-model.trim="secrets.instagramClientSecret" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+            </div>
+
+            <label>
+              Instagram redirect URI
+              <input v-model.trim="secrets.instagramRedirectUri" type="text" :placeholder="INSTAGRAM_REDIRECT_URI" />
+            </label>
+
+            <div class="two-col">
+              <label>
+                TikTok client key
+                <input v-model.trim="secrets.tiktokClientKey" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+              <label>
+                TikTok client secret
+                <input v-model.trim="secrets.tiktokClientSecret" :type="secretsRevealed ? 'text' : 'password'" autocomplete="new-password" />
+              </label>
+            </div>
+
+            <label>
+              TikTok redirect URI
+              <input v-model.trim="secrets.tiktokRedirectUri" type="text" :placeholder="TIKTOK_REDIRECT_URI" />
+            </label>
+
+            <p class="hint">
+              Create a Google Cloud service account, download its JSON key, share the target Sheet with its client_email, then paste the full JSON here.
+            </p>
+            <p v-if="secretsMessage" class="message" :class="{ error: secretsMessageType === 'error' }">
+              {{ secretsMessage }}
+            </p>
+
+            <div class="actions modal-actions">
+              <button type="submit" :disabled="secretsBusy">
+                {{ secretsBusy ? 'Saving...' : 'Save Backend Secrets' }}
+              </button>
+              <button type="button" class="secondary" :disabled="secretsBusy" @click="closeSecretsModal">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
   </main>
 </template>
 
@@ -472,17 +590,43 @@ const YOUTUBE_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackYouTube`
 const INSTAGRAM_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackInstagram`
 const FUNCTION_ENDPOINTS = {
   saveConfig: `${CLOUD_FUNCTION_BASE_URL}/saveSyncConfig`,
+  secretStatus: `${CLOUD_FUNCTION_BASE_URL}/getSyncSecretStatus`,
   testSheet: `${CLOUD_FUNCTION_BASE_URL}/testSheetConnection`,
   runSync: `${CLOUD_FUNCTION_BASE_URL}/runSheetSync`,
   startInstagram: `${CLOUD_FUNCTION_BASE_URL}/startInstagramOAuth`,
   startYouTube: `${CLOUD_FUNCTION_BASE_URL}/startYouTubeOAuth`,
   startTikTok: `${CLOUD_FUNCTION_BASE_URL}/startTikTokOAuth`
 }
+const SECRET_FIELDS = [
+  { name: 'googleServiceAccountJson', label: 'Service account JSON' },
+  { name: 'youtubeApiKey', label: 'YouTube API key' },
+  { name: 'googleOAuthClientId', label: 'Google OAuth client ID' },
+  { name: 'googleOAuthClientSecret', label: 'Google OAuth client secret' },
+  { name: 'youtubeRedirectUri', label: 'YouTube redirect URI' },
+  { name: 'instagramClientId', label: 'Instagram client ID' },
+  { name: 'instagramClientSecret', label: 'Instagram client secret' },
+  { name: 'instagramRedirectUri', label: 'Instagram redirect URI' },
+  { name: 'tiktokClientKey', label: 'TikTok client key' },
+  { name: 'tiktokClientSecret', label: 'TikTok client secret' },
+  { name: 'tiktokRedirectUri', label: 'TikTok redirect URI' }
+]
 
 const busy = ref(false)
 const busyTarget = ref('')
 const message = ref('')
 const messageType = ref('info')
+const showSettings = ref(false)
+const showSecretsModal = ref(false)
+const showExistingSecrets = ref(false)
+const secretsBusy = ref(false)
+const secretsRevealed = ref(false)
+const secretRevealLoading = ref(false)
+const secretsMessage = ref('')
+const secretsMessageType = ref('info')
+const secretStatusFields = ref([])
+const secretStatusLoading = ref(false)
+const secretStatusError = ref('')
+const secretStatusUpdatedAt = ref(null)
 const previewRows = ref([])
 const followerPreviewRows = ref([])
 const instagramDebugRows = ref([])
@@ -546,6 +690,7 @@ const form = reactive({
 
 const secrets = reactive({
   googleServiceAccountJson: '',
+  youtubeApiKey: '',
   googleOAuthClientId: '',
   googleOAuthClientSecret: '',
   youtubeRedirectUri: YOUTUBE_REDIRECT_URI,
@@ -569,6 +714,28 @@ const allInstagramSelected = computed(() => allSelected('instagram'))
 const allYouTubeSelected = computed(() => allSelected('youtube'))
 const allTikTokSelected = computed(() => allSelected('tiktok'))
 const instagramDebugText = computed(() => JSON.stringify(instagramDebugRows.value, null, 2))
+const secretStatusItems = computed(() => {
+  const statusByName = Object.fromEntries(
+    secretStatusFields.value.map((item) => [item.name, item])
+  )
+  return SECRET_FIELDS.map((field) => {
+    const status = statusByName[field.name] || {}
+    return {
+      ...field,
+      configured: Boolean(status.configured),
+      source: status.source || '',
+      info: status.info || ''
+    }
+  })
+})
+const configuredSecretCount = computed(() => (
+  secretStatusItems.value.filter((item) => item.configured).length
+))
+const secretStatusSummary = computed(() => {
+  if (secretStatusLoading.value) return 'Checking secrets'
+  if (secretStatusError.value) return 'Status unavailable'
+  return `${configuredSecretCount.value}/${SECRET_FIELDS.length} configured`
+})
 const accountSummary = computed(() => {
   const total = form.selectedAccounts.facebook.length
     + form.selectedAccounts.instagram.length
@@ -599,6 +766,101 @@ async function authHeaders() {
 function setMessage(text, type = 'info') {
   message.value = text
   messageType.value = type
+}
+
+function setSecretsMessage(text, type = 'info') {
+  secretsMessage.value = text
+  secretsMessageType.value = type
+}
+
+function secretStatusText(item) {
+  if (!item.configured) return 'Not configured'
+  const source = item.source ? `${item.source}: ` : ''
+  return item.info ? `${source}${item.info}` : `${source}Configured`
+}
+
+function existingSecretInfo(name) {
+  const item = secretStatusFields.value.find((field) => field.name === name)
+  return item?.configured ? item.info || '' : ''
+}
+
+function resetSecretFields() {
+  secretsRevealed.value = false
+  Object.assign(secrets, {
+    googleServiceAccountJson: '',
+    youtubeApiKey: '',
+    googleOAuthClientId: '',
+    googleOAuthClientSecret: '',
+    youtubeRedirectUri: existingSecretInfo('youtubeRedirectUri') || YOUTUBE_REDIRECT_URI,
+    instagramClientId: '',
+    instagramClientSecret: '',
+    instagramRedirectUri: existingSecretInfo('instagramRedirectUri') || INSTAGRAM_REDIRECT_URI,
+    tiktokClientKey: '',
+    tiktokClientSecret: '',
+    tiktokRedirectUri: existingSecretInfo('tiktokRedirectUri') || TIKTOK_REDIRECT_URI
+  })
+}
+
+function valueFromSecretFields(fields, name) {
+  const item = fields.find((field) => field.name === name)
+  return item?.value || ''
+}
+
+function applyRevealedSecrets(fields = []) {
+  Object.assign(secrets, {
+    googleServiceAccountJson: valueFromSecretFields(fields, 'googleServiceAccountJson'),
+    youtubeApiKey: valueFromSecretFields(fields, 'youtubeApiKey'),
+    googleOAuthClientId: valueFromSecretFields(fields, 'googleOAuthClientId'),
+    googleOAuthClientSecret: valueFromSecretFields(fields, 'googleOAuthClientSecret'),
+    youtubeRedirectUri: valueFromSecretFields(fields, 'youtubeRedirectUri') || existingSecretInfo('youtubeRedirectUri') || YOUTUBE_REDIRECT_URI,
+    instagramClientId: valueFromSecretFields(fields, 'instagramClientId'),
+    instagramClientSecret: valueFromSecretFields(fields, 'instagramClientSecret'),
+    instagramRedirectUri: valueFromSecretFields(fields, 'instagramRedirectUri') || existingSecretInfo('instagramRedirectUri') || INSTAGRAM_REDIRECT_URI,
+    tiktokClientKey: valueFromSecretFields(fields, 'tiktokClientKey'),
+    tiktokClientSecret: valueFromSecretFields(fields, 'tiktokClientSecret'),
+    tiktokRedirectUri: valueFromSecretFields(fields, 'tiktokRedirectUri') || existingSecretInfo('tiktokRedirectUri') || TIKTOK_REDIRECT_URI
+  })
+}
+
+async function openSecretsModal() {
+  showSecretsModal.value = true
+  setSecretsMessage('')
+  if (!secretStatusFields.value.length) {
+    await loadSecretStatus()
+  }
+  resetSecretFields()
+}
+
+function closeSecretsModal() {
+  showSecretsModal.value = false
+  showExistingSecrets.value = false
+  setSecretsMessage('')
+  resetSecretFields()
+}
+
+function hideExistingSecrets() {
+  showExistingSecrets.value = false
+  hideRevealedSecrets()
+}
+
+async function revealBackendSecrets() {
+  secretRevealLoading.value = true
+  setSecretsMessage('')
+  try {
+    const fields = await loadSecretStatus({ reveal: true })
+    applyRevealedSecrets(fields)
+    secretsRevealed.value = true
+    setSecretsMessage('Secrets revealed in the form. Hide or close this popup when finished.')
+  } catch (error) {
+    setSecretsMessage(error.message, 'error')
+  } finally {
+    secretRevealLoading.value = false
+  }
+}
+
+function hideRevealedSecrets() {
+  resetSecretFields()
+  setSecretsMessage('Secrets hidden.')
 }
 
 function dateWindowLabel(startDate, endDate) {
@@ -691,6 +953,7 @@ function configPayload() {
   const firstFollowerRange = followerDateRanges[0]
   return {
     ...form,
+    headerRow: 1,
     startDate: form.contentStartDate,
     endDate: form.contentEndDate,
     followerStartDate: firstFollowerRange.startDate,
@@ -710,6 +973,27 @@ async function postJson(url, body = {}) {
     throw new Error(data.error || data.message || `Request failed: ${response.status}`)
   }
   return data
+}
+
+async function loadSecretStatus({ reveal = false } = {}) {
+  secretStatusLoading.value = true
+  secretStatusError.value = ''
+  try {
+    const result = await postJson(FUNCTION_ENDPOINTS.secretStatus, { configId: CONFIG_ID, reveal })
+    const fields = Array.isArray(result.fields) ? result.fields : []
+    secretStatusFields.value = fields.map(({ value, ...field }) => field)
+    secretStatusUpdatedAt.value = result.updatedAt || null
+    if (!reveal && !secretsRevealed.value) {
+      resetSecretFields()
+    }
+    return fields
+  } catch (error) {
+    secretStatusError.value = error.message
+    if (reveal) throw error
+    return []
+  } finally {
+    secretStatusLoading.value = false
+  }
 }
 
 async function loadConfig() {
@@ -826,21 +1110,40 @@ async function saveConfig() {
   busy.value = true
   setMessage('')
   try {
-    const secretsPayload = cleanSecretsPayload()
     await postJson(FUNCTION_ENDPOINTS.saveConfig, {
       configId: CONFIG_ID,
-      config: configPayload(),
-      secrets: secretsPayload
+      config: configPayload()
     })
-    Object.keys(secrets).forEach((key) => { secrets[key] = '' })
-    setMessage(Object.keys(secretsPayload).length
-      ? 'Sync config and backend secrets saved.'
-      : 'Sync config saved. Secret fields were empty, so no secrets were changed.')
+    setMessage('Sync config saved. Backend secrets were not changed.')
     await loadConfig()
   } catch (error) {
     setMessage(error.message, 'error')
   } finally {
     busy.value = false
+  }
+}
+
+async function saveBackendSecrets() {
+  secretsBusy.value = true
+  setSecretsMessage('')
+  try {
+    const secretsPayload = cleanSecretsPayload()
+    if (!Object.keys(secretsPayload).length) {
+      throw new Error('Enter at least one backend secret to update.')
+    }
+    await postJson(FUNCTION_ENDPOINTS.saveConfig, {
+      configId: CONFIG_ID,
+      config: configPayload(),
+      secrets: secretsPayload
+    })
+    await Promise.all([loadConfig(), loadSecretStatus()])
+    resetSecretFields()
+    setSecretsMessage('Backend secrets saved.')
+    setMessage('Backend secrets saved. Sync config was kept up to date.')
+  } catch (error) {
+    setSecretsMessage(error.message, 'error')
+  } finally {
+    secretsBusy.value = false
   }
 }
 
@@ -985,7 +1288,7 @@ function formatTimestamp(value) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadConfig(), loadRuns(), loadAccounts()])
+  await Promise.all([loadConfig(), loadRuns(), loadAccounts(), loadSecretStatus()])
 })
 </script>
 
@@ -1067,9 +1370,16 @@ h2 {
   text-transform: capitalize;
 }
 
+.mode-toggle {
+  background: #38bdf8;
+  color: #06121b;
+  margin-top: 14px;
+  width: 100%;
+}
+
 .sync-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   margin: 0 auto 18px;
   max-width: 1280px;
@@ -1089,6 +1399,17 @@ h2 {
   border-bottom: 1px solid #2b3a55;
   margin-bottom: 18px;
   padding-bottom: 12px;
+}
+
+.panel-title > div {
+  display: grid;
+  gap: 4px;
+}
+
+.panel-title small {
+  color: #99a8bc;
+  font-size: 0.82rem;
+  font-weight: 500;
 }
 
 label {
@@ -1128,6 +1449,26 @@ textarea:focus {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr 1fr;
+}
+
+.quick-sheet-panel {
+  margin-bottom: 18px;
+}
+
+.quick-sheet-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(160px, 0.8fr) minmax(180px, 0.8fr);
+}
+
+.sheet-id-field input {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+}
+
+.quick-actions {
+  border-top: 1px solid #2b3a55;
+  margin-top: 4px;
+  padding-top: 16px;
 }
 
 .tab-date-grid {
@@ -1248,9 +1589,71 @@ button.secondary {
   color: #06121b;
 }
 
+button.ghost {
+  background: #22314a;
+  color: #dbe7f5;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.secret-status-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.secret-status-list.compact {
+  grid-template-columns: 1fr;
+  max-height: 410px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.secret-status-item {
+  align-items: flex-start;
+  background: #0f1727;
+  border: 1px solid #2b3a55;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 11px 12px;
+}
+
+.secret-status-item.configured {
+  border-color: rgba(34, 197, 94, 0.42);
+}
+
+.secret-status-item strong {
+  color: #dbe7f5;
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 3px;
+}
+
+.secret-status-item small {
+  color: #99a8bc;
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.status-dot {
+  background: #64748b;
+  border-radius: 999px;
+  display: inline-block;
+  height: 10px;
+  margin-top: 5px;
+  width: 10px;
+}
+
+.secret-status-item.configured .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
 }
 
 .controls-panel {
@@ -1462,6 +1865,85 @@ th {
   word-break: break-word;
 }
 
+.modal-backdrop {
+  align-items: center;
+  background: rgba(2, 6, 23, 0.74);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 22px;
+  position: fixed;
+  z-index: 50;
+}
+
+.secret-modal {
+  background: #172033;
+  border: 1px solid #34445f;
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+  color: #f8fafc;
+  max-height: min(900px, calc(100vh - 44px));
+  max-width: 980px;
+  overflow: hidden;
+  width: min(980px, 100%);
+}
+
+.modal-header {
+  align-items: center;
+  border-bottom: 1px solid #2b3a55;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 20px;
+}
+
+.close-btn {
+  min-height: 36px;
+}
+
+.modal-body {
+  display: grid;
+  gap: 18px;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  padding: 20px;
+}
+
+.existing-secrets {
+  background: #0f1727;
+  border: 1px solid #2b3a55;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.existing-secrets .panel-title {
+  margin-bottom: 14px;
+}
+
+.existing-secrets .secret-status-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reveal-actions {
+  border-top: 1px solid #2b3a55;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.reveal-actions.top {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.secrets-form {
+  display: grid;
+}
+
+.modal-actions {
+  border-top: 1px solid #2b3a55;
+  padding-top: 14px;
+}
+
 @media (max-width: 900px) {
   .sheet-sync {
     padding: 18px;
@@ -1471,8 +1953,19 @@ th {
   .sync-grid,
   .accounts-grid,
   .run-control-row,
-  .two-col {
+  .two-col,
+  .quick-sheet-grid,
+  .existing-secrets .secret-status-list {
     grid-template-columns: 1fr;
+  }
+
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .secret-modal {
+    max-height: calc(100vh - 24px);
   }
 }
 </style>

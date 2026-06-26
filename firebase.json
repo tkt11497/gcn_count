@@ -12,6 +12,7 @@
       { "source": "/api/health", "function": "healthCheck" },
       { "source": "/api/youtube/live-counts", "function": "youtubeLiveCounts" },
       { "source": "/api/sheet-sync/config", "function": "saveSyncConfig" },
+      { "source": "/api/sheet-sync/secrets/status", "function": "getSyncSecretStatus" },
       { "source": "/api/sheet-sync/test", "function": "testSheetConnection" },
       { "source": "/api/sheet-sync/run", "function": "runSheetSync" },
       { "source": "/api/instagram/start", "function": "startInstagramOAuth" },

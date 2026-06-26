@@ -38,6 +38,33 @@ const FOLLOWER_HEADERS = [
   'Growth',
   'Current Followers',
 ];
+const SECRET_FIELDS = [
+  {
+    name: 'googleServiceAccountJson',
+    label: 'Service account JSON',
+    envNames: ['GOOGLE_SERVICE_ACCOUNT_JSON'],
+    fallbackEnvPair: ['GOOGLE_CLIENT_EMAIL', 'GOOGLE_PRIVATE_KEY'],
+  },
+  { name: 'youtubeApiKey', label: 'YouTube API key', envNames: ['YT_API_KEY'] },
+  {
+    name: 'googleOAuthClientId',
+    label: 'Google OAuth client ID',
+    envNames: ['GOOGLE_OAUTH_CLIENT_ID', 'YOUTUBE_CLIENT_ID'],
+  },
+  {
+    name: 'googleOAuthClientSecret',
+    label: 'Google OAuth client secret',
+    envNames: ['GOOGLE_OAUTH_CLIENT_SECRET', 'YOUTUBE_CLIENT_SECRET'],
+  },
+  { name: 'youtubeRedirectUri', label: 'YouTube redirect URI', envNames: ['YOUTUBE_REDIRECT_URI'], revealValue: true },
+  { name: 'instagramClientId', label: 'Instagram client ID', envNames: ['INSTAGRAM_CLIENT_ID'] },
+  { name: 'instagramClientSecret', label: 'Instagram client secret', envNames: ['INSTAGRAM_CLIENT_SECRET'] },
+  { name: 'instagramRedirectUri', label: 'Instagram redirect URI', envNames: ['INSTAGRAM_REDIRECT_URI'], revealValue: true },
+  { name: 'tiktokClientKey', label: 'TikTok client key', envNames: ['TIKTOK_CLIENT_KEY'] },
+  { name: 'tiktokClientSecret', label: 'TikTok client secret', envNames: ['TIKTOK_CLIENT_SECRET'] },
+  { name: 'tiktokRedirectUri', label: 'TikTok redirect URI', envNames: ['TIKTOK_REDIRECT_URI'], revealValue: true },
+];
+const SECRET_FIELD_NAMES = SECRET_FIELDS.map((field) => field.name);
 
 function db() {
   return getFirestore();
@@ -386,21 +413,8 @@ function targetIncludesFollowers(target) {
 
 async function saveSecretPatch(configId, secrets = {}) {
   const patch = {};
-  const fieldNames = [
-    'googleServiceAccountJson',
-    'youtubeApiKey',
-    'googleOAuthClientId',
-    'googleOAuthClientSecret',
-    'youtubeRedirectUri',
-    'tiktokClientKey',
-    'tiktokClientSecret',
-    'tiktokRedirectUri',
-    'instagramClientId',
-    'instagramClientSecret',
-    'instagramRedirectUri',
-  ];
 
-  for (const fieldName of fieldNames) {
+  for (const fieldName of SECRET_FIELD_NAMES) {
     if (Object.prototype.hasOwnProperty.call(secrets, fieldName) && secrets[fieldName]) {
       patch[fieldName] = String(secrets[fieldName]);
     }
@@ -414,6 +428,100 @@ async function saveSecretPatch(configId, secrets = {}) {
 async function getSecretDoc(configId = DEFAULT_CONFIG_ID) {
   const snap = await db().collection('sync_secrets').doc(configId).get();
   return snap.exists ? snap.data() : {};
+}
+
+function maskSecretValue(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.length <= 8) return 'Stored';
+  return `${text.slice(0, 4)}...${text.slice(-4)}`;
+}
+
+function timestampToIso(value) {
+  if (!value) return null;
+  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function rawEnvSecretValue(field) {
+  for (const envName of field.envNames || []) {
+    if (process.env[envName]) {
+      return process.env[envName];
+    }
+  }
+
+  if (
+    field.fallbackEnvPair
+    && field.fallbackEnvPair.every((envName) => process.env[envName])
+  ) {
+    if (field.name === 'googleServiceAccountJson') {
+      return JSON.stringify({
+        client_email: process.env[field.fallbackEnvPair[0]],
+        private_key: process.env[field.fallbackEnvPair[1]],
+      }, null, 2);
+    }
+    return process.env[field.fallbackEnvPair[0]];
+  }
+
+  return null;
+}
+
+function envSecretValue(field) {
+  const value = rawEnvSecretValue(field);
+  return value ? { value, source: 'Environment' } : null;
+}
+
+function serviceAccountInfo(value) {
+  const text = String(value || '').trim();
+  if (text.includes('@')) {
+    return `client_email: ${text}`;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    const parts = [
+      parsed.client_email ? `client_email: ${parsed.client_email}` : '',
+      parsed.project_id ? `project_id: ${parsed.project_id}` : '',
+    ].filter(Boolean);
+    return parts.join(' | ');
+  } catch (_) {
+    return maskSecretValue(value);
+  }
+}
+
+function secretDisplayInfo(field, value, source) {
+  if (!value) return '';
+  if (field.name === 'googleServiceAccountJson') {
+    return serviceAccountInfo(value);
+  }
+  if (field.revealValue) {
+    return String(value);
+  }
+  if (field.name.endsWith('ClientId') || field.name === 'tiktokClientKey') {
+    return maskSecretValue(value);
+  }
+  return source === 'Environment' ? 'Configured in environment' : 'Stored securely';
+}
+
+function buildSecretStatus(secrets = {}, { includeValues = false } = {}) {
+  return SECRET_FIELDS.map((field) => {
+    const envSecret = envSecretValue(field);
+    const savedValue = secrets?.[field.name];
+    const resolved = envSecret || (savedValue ? { value: savedValue, source: 'Saved setting' } : null);
+
+    const status = {
+      name: field.name,
+      label: field.label,
+      configured: Boolean(resolved?.value),
+      source: resolved?.source || '',
+      info: resolved?.value ? secretDisplayInfo(field, resolved.value, resolved.source) : '',
+    };
+
+    if (includeValues && resolved?.value) {
+      status.value = String(resolved.value);
+    }
+
+    return status;
+  });
 }
 
 async function getSecretValue(configId, name, envNames = []) {
@@ -1904,28 +2012,18 @@ async function queryYouTubeVideoMetrics(accessToken, channelId, videoIds, config
   const result = new Map();
   for (let index = 0; index < videoIds.length; index += 200) {
     const ids = videoIds.slice(index, index + 200);
-    let data;
-    try {
-      data = await youtubeAnalyticsQuery(accessToken, {
-        ids: `channel==${channelId}`,
-        startDate: config.startDate,
-        endDate: config.endDate,
-        metrics: 'views,likes,comments,shares,videoThumbnailImpressions',
-        dimensions: 'video',
-        filters: `video==${ids.join(',')}`,
-        maxResults: String(ids.length),
-      });
-    } catch (error) {
-      data = await youtubeAnalyticsQuery(accessToken, {
-        ids: `channel==${channelId}`,
-        startDate: config.startDate,
-        endDate: config.endDate,
-        metrics: 'views,likes,comments,shares',
-        dimensions: 'video',
-        filters: `video==${ids.join(',')}`,
-        maxResults: String(ids.length),
-      });
-    }
+    const baseParams = {
+      ids: `channel==${channelId}`,
+      startDate: config.startDate,
+      endDate: config.endDate,
+      dimensions: 'video',
+      filters: `video==${ids.join(',')}`,
+      maxResults: String(ids.length),
+    };
+    const data = await youtubeAnalyticsQuery(accessToken, {
+      ...baseParams,
+      metrics: 'views,likes,comments,shares',
+    });
     const columns = analyticsColumnMap(data);
     for (const row of data?.rows || []) {
       const videoId = row[columns.video];
@@ -1934,12 +2032,30 @@ async function queryYouTubeVideoMetrics(accessToken, channelId, videoIds, config
       const likes = analyticsNumber(row, columns, 'likes') || 0;
       const comments = analyticsNumber(row, columns, 'comments') || 0;
       const shares = analyticsNumber(row, columns, 'shares') || 0;
-      const impressions = analyticsNumber(row, columns, 'videoThumbnailImpressions');
       result.set(videoId, {
         views,
         interactions: likes + comments + shares,
-        impressions,
+        impressions: null,
       });
+    }
+
+    try {
+      const reachData = await youtubeAnalyticsQuery(accessToken, {
+        ...baseParams,
+        metrics: 'videoThumbnailImpressions',
+      });
+      const reachColumns = analyticsColumnMap(reachData);
+      for (const row of reachData?.rows || []) {
+        const videoId = row[reachColumns.video];
+        if (!videoId) continue;
+        const previous = result.get(videoId) || {};
+        result.set(videoId, {
+          ...previous,
+          impressions: analyticsNumber(row, reachColumns, 'videoThumbnailImpressions'),
+        });
+      }
+    } catch (_) {
+      // Reach/impression data is not available for every YouTube account/API surface.
     }
   }
   return result;
@@ -1979,8 +2095,10 @@ async function discoverYouTubeRows(configId, config) {
       );
       if (!videoIds.length) continue;
 
-      const [metricMap, videoGroups] = await Promise.all([
-        queryYouTubeVideoMetrics(accessToken, channelProfile.channelId, videoIds, config),
+      const [metricResult, videoGroups] = await Promise.all([
+        queryYouTubeVideoMetrics(accessToken, channelProfile.channelId, videoIds, config)
+          .then((metricMap) => ({ metricMap, error: null }))
+          .catch((error) => ({ metricMap: new Map(), error })),
         Promise.all(Array.from({ length: Math.ceil(videoIds.length / 50) }, (_, groupIndex) => {
           const chunkIds = videoIds.slice(groupIndex * 50, groupIndex * 50 + 50);
           return youtubeDataApiWithToken(accessToken, 'videos', {
@@ -1989,6 +2107,14 @@ async function discoverYouTubeRows(configId, config) {
           });
         })),
       ]);
+      if (metricResult.error) {
+        errors.push({
+          platform: 'youtube',
+          accountId: channel.id,
+          message: `YouTube Analytics live metrics unavailable: ${metricResult.error.message}. Used YouTube Data API fallback; shares and Reach may be missing.`,
+        });
+      }
+      const metricMap = metricResult.metricMap;
 
       for (const group of videoGroups) {
         for (const video of group?.items || []) {
@@ -2908,6 +3034,31 @@ export const testSheetConnection = onRequest({ cors: true, maxInstances: 10 }, a
     await ensureSheetHeaders(configId, config);
     await ensureFollowerSheetHeaders(configId, config);
     res.status(200).json({ ok: true, message: 'Sheet connection works and both tabs are ready.' });
+  } catch (error) {
+    jsonError(res, 400, error.message);
+  }
+});
+
+export const getSyncSecretStatus = onRequest({ cors: true, maxInstances: 10 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed. Use POST.');
+
+  try {
+    await requireFirebaseUser(req);
+    const configId = req.body?.configId || DEFAULT_CONFIG_ID;
+    const includeValues = req.body?.reveal === true;
+    const secrets = await getSecretDoc(configId);
+    const fields = buildSecretStatus(secrets, { includeValues });
+    res.status(200).json({
+      ok: true,
+      configId,
+      revealed: includeValues,
+      updatedAt: timestampToIso(secrets?.updatedAt),
+      configuredCount: fields.filter((field) => field.configured).length,
+      totalCount: fields.length,
+      fields,
+    });
   } catch (error) {
     jsonError(res, 400, error.message);
   }

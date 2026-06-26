@@ -6,6 +6,7 @@ import fetch from 'node-fetch';
 export {
   saveSyncConfig,
   testSheetConnection,
+  getSyncSecretStatus,
   runSheetSync,
   startInstagramOAuth,
   oauthCallbackInstagram,
