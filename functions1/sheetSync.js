@@ -1400,26 +1400,36 @@ function instagramAccountDebug(account) {
   });
 }
 
+const INSTAGRAM_IMPRESSIONS_DEPRECATED_AFTER = Date.UTC(2024, 6, 2);
+
+function instagramMediaCreatedBeforeImpressionsCutoff(media) {
+  const createdAtMs = dateValueMillis(media?.timestamp || media?.createdAt || '');
+  return createdAtMs !== null && createdAtMs < INSTAGRAM_IMPRESSIONS_DEPRECATED_AFTER;
+}
+
 function instagramPrimaryInsightMetricNames(media = null) {
   const contentType = media ? instagramContentType(media) : '';
-  if (contentType === 'Stories') return ['reach', 'views', 'replies', 'shares', 'navigation'];
-  return ['reach', 'views', 'total_interactions', 'likes', 'comments', 'saved', 'shares'];
+  if (contentType === 'Stories') return ['reach', 'views'];
+  return ['reach', 'views'];
+}
+
+function instagramEngagementInsightMetricNames(media = null) {
+  const contentType = media ? instagramContentType(media) : '';
+  if (contentType === 'Stories') {
+    return ['replies', 'shares', 'navigation'];
+  }
+  return ['total_interactions', 'likes', 'comments', 'saved', 'shares'];
 }
 
 function instagramLegacyInsightMetricNames(media = null) {
-  if (!media) return ['impressions', 'plays', 'video_views', 'engagement'];
-  const contentType = media ? instagramContentType(media) : '';
-  if (contentType === 'Stories') {
-    return ['impressions', 'replies', 'exits', 'taps_forward', 'taps_back'];
-  }
-  if (['Reels', 'Video', 'Live'].includes(contentType)) {
-    return ['plays', 'impressions', 'video_views', 'engagement'];
-  }
-  return ['impressions', 'engagement'];
+  return media && instagramMediaCreatedBeforeImpressionsCutoff(media) ? ['impressions'] : [];
 }
 
-function instagramExpandedInsightField(metricNames) {
-  return `insights.metric(${metricNames.join(',')})`;
+function instagramImpressionMetricNames(media = null) {
+  return uniqueValues([
+    ...instagramLegacyInsightMetricNames(media),
+    'views',
+  ]);
 }
 
 async function requestInstagramMediaPage(account, path, baseParams, fieldSet, debug = [], reason = '') {
@@ -1467,17 +1477,14 @@ async function getInstagramMediaPage(account, after = '', debug = []) {
     limit: '50',
     ...(after ? { after } : {}),
   };
-  const fullFields = 'id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count';
+  const fullFields = 'id,caption,media_type,permalink,timestamp,like_count,comments_count';
+  const facebookLoginFields = 'id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count';
   const basicFields = 'id,caption,media_type,permalink,timestamp';
   const fieldSets = [
-    {
-      name: 'expanded_current_insights',
-      fields: `${fullFields},${instagramExpandedInsightField(instagramPrimaryInsightMetricNames())}`,
-    },
-    {
-      name: 'expanded_legacy_insights',
-      fields: `${fullFields},${instagramExpandedInsightField(['reach', ...instagramLegacyInsightMetricNames()])}`,
-    },
+    ...(account.tokenSource === 'instagram' ? [] : [{
+      name: 'media_fields_with_product_type',
+      fields: facebookLoginFields,
+    }]),
     {
       name: 'media_fields',
       fields: fullFields,
@@ -1514,16 +1521,20 @@ async function getInstagramMediaPage(account, after = '', debug = []) {
 }
 
 function instagramInsightMetricNames(media) {
-  return [
+  return uniqueValues([
     ...instagramPrimaryInsightMetricNames(media),
+    ...instagramEngagementInsightMetricNames(media),
     ...instagramLegacyInsightMetricNames(media),
-  ].filter((metricName, index, all) => all.indexOf(metricName) === index);
+  ]);
 }
 
 function instagramInsightsMap(data) {
   const insights = {};
   for (const item of data?.data || []) {
-    const value = item?.values?.[0]?.value;
+    const values = item?.values || [];
+    const value = values.length
+      ? values[values.length - 1]?.value
+      : item?.total_value?.value ?? item?.total_value;
     insights[item?.name] = insightValueToNumber(value);
   }
   return insights;
@@ -1543,128 +1554,137 @@ function instagramExpandedInsightsFromMedia(media) {
 }
 
 function instagramNeedsMoreInsights(media, insights) {
-  const isStory = instagramContentType(media) === 'Stories';
+  const contentType = instagramContentType(media);
+  const isStory = contentType === 'Stories';
+  const isVideo = ['Live', 'Reels', 'Video'].includes(contentType);
   const hasReach = instagramMetricFromInsights(insights, ['reach']) !== null;
-  const hasViews = instagramMetricFromInsights(insights, ['views', 'impressions', 'plays', 'video_views']) !== null;
+  const hasViews = instagramMetricFromInsights(insights, instagramImpressionMetricNames(media)) !== null;
+  const hasVideoViews = !isVideo || instagramMetricFromInsights(insights, ['views']) !== null;
   const hasInteractions = isStory
-    ? instagramMetricFromInsights(insights, ['total_interactions', 'engagement', 'replies', 'shares']) !== null
+    ? instagramMetricFromInsights(insights, ['replies', 'shares']) !== null
     : instagramMetricFromInsights(insights, [
       'total_interactions',
-      'engagement',
       'likes',
       'comments',
       'saved',
       'shares',
     ]) !== null;
-  return !hasReach || !hasViews || !hasInteractions;
+  return !hasReach || !hasViews || !hasVideoViews || !hasInteractions;
 }
 
 async function getInstagramInsightsForMedia(media, token, debug = [], existingInsights = {}) {
   const primaryMetricNames = instagramPrimaryInsightMetricNames(media);
+  const engagementMetricNames = instagramEngagementInsightMetricNames(media);
+  const legacyMetricNames = instagramLegacyInsightMetricNames(media);
   const metricNames = instagramInsightMetricNames(media);
   const path = `${media.id}/insights`;
   const insights = { ...existingInsights };
+  const diagnostics = {
+    mediaId: media.id,
+    type: instagramContentType(media),
+    requested: [],
+    errors: [],
+    emptyResponses: [],
+  };
   if (!instagramNeedsMoreInsights(media, insights)) {
     pushInstagramDebug(debug, {
       stage: 'insights_from_media_list',
       mediaId: media.id,
       insights,
     });
-    return insights;
+    diagnostics.source = 'media_list';
+    return { values: insights, diagnostics };
   }
 
-  try {
+  const requestMetrics = async (names, reason) => {
+    const requestedMetricNames = uniqueValues(names)
+      .filter((metricName) => nullableNumber(insights[metricName]) === null);
+    if (!requestedMetricNames.length) return true;
+    diagnostics.requested.push({ metrics: requestedMetricNames, reason });
     pushInstagramDebug(debug, {
       stage: 'insights_request',
       media: safeInstagramDebugValue(media),
       path,
-      params: { metric: primaryMetricNames.join(',') },
+      params: { metric: requestedMetricNames.join(',') },
+      reason,
     });
-    const data = await igDirectGet(path, token, {
-      metric: primaryMetricNames.join(','),
-    });
-    pushInstagramDebug(debug, {
-      stage: 'insights_response',
-      mediaId: media.id,
-      path,
-      response: data,
-    });
-    Object.assign(insights, instagramInsightsMap(data));
-  } catch (error) {
-    pushInstagramDebug(debug, {
-      stage: 'insights_error',
-      mediaId: media.id,
-      path,
-      params: { metric: primaryMetricNames.join(',') },
-      message: error.message,
-    });
-    for (const metricName of metricNames) {
-      if (nullableNumber(insights[metricName]) !== null) continue;
-      try {
-        pushInstagramDebug(debug, {
-          stage: 'insights_request',
-          mediaId: media.id,
-          path,
-          params: { metric: metricName },
-          reason: 'single metric fallback',
+    try {
+      const data = await igDirectGet(path, token, {
+        metric: requestedMetricNames.join(','),
+      });
+      const mapped = instagramInsightsMap(data);
+      const returnedMetricNames = Object.keys(mapped)
+        .filter((metricName) => nullableNumber(mapped[metricName]) !== null);
+      pushInstagramDebug(debug, {
+        stage: 'insights_response',
+        mediaId: media.id,
+        path,
+        metrics: requestedMetricNames,
+        response: data,
+      });
+      if (!returnedMetricNames.length) {
+        diagnostics.emptyResponses.push({
+          metrics: requestedMetricNames,
+          reason,
+          response: safeInstagramDebugValue(data),
         });
-        const data = await igDirectGet(path, token, {
-          metric: metricName,
-        });
-        pushInstagramDebug(debug, {
-          stage: 'insights_response',
-          mediaId: media.id,
-          path,
-          response: data,
-        });
-        Object.assign(insights, instagramInsightsMap(data));
-      } catch (singleMetricError) {
-        pushInstagramDebug(debug, {
-          stage: 'insights_error',
-          mediaId: media.id,
-          path,
-          params: { metric: metricName },
-          message: singleMetricError.message,
-        });
-        // Some metrics are unavailable depending on media type, age, and permissions.
       }
+      Object.assign(insights, mapped);
+      return true;
+    } catch (error) {
+      diagnostics.errors.push({
+        metrics: requestedMetricNames,
+        reason,
+        message: error.message,
+      });
+      pushInstagramDebug(debug, {
+        stage: 'insights_error',
+        mediaId: media.id,
+        path,
+        params: { metric: requestedMetricNames.join(',') },
+        reason,
+        message: error.message,
+      });
+      return false;
     }
+  };
+
+  const requestSingleMetrics = async (names, reason) => {
+    for (const metricName of uniqueValues(names)) {
+      if (nullableNumber(insights[metricName]) !== null) continue;
+      await requestMetrics([metricName], reason);
+    }
+  };
+
+  const primaryBatchSucceeded = await requestMetrics(primaryMetricNames, 'core reach/views metrics');
+  if (!primaryBatchSucceeded) {
+    await requestSingleMetrics(primaryMetricNames, 'single core metric fallback');
+  }
+
+  const engagementBatchSucceeded = await requestMetrics(engagementMetricNames, 'engagement metrics');
+  if (!engagementBatchSucceeded) {
+    await requestSingleMetrics(engagementMetricNames, 'single engagement metric fallback');
+  }
+
+  if (legacyMetricNames.length && instagramMetricFromInsights(insights, instagramImpressionMetricNames(media)) === null) {
+    await requestSingleMetrics(legacyMetricNames, 'legacy pre-2024 impressions fallback');
   }
 
   if (instagramNeedsMoreInsights(media, insights)) {
-    for (const metricName of metricNames) {
-      if (nullableNumber(insights[metricName]) !== null) continue;
-      try {
-        pushInstagramDebug(debug, {
-          stage: 'insights_request',
-          mediaId: media.id,
-          path,
-          params: { metric: metricName },
-          reason: 'fill missing metric after batch response',
-        });
-        const data = await igDirectGet(path, token, {
-          metric: metricName,
-        });
-        pushInstagramDebug(debug, {
-          stage: 'insights_response',
-          mediaId: media.id,
-          path,
-          response: data,
-        });
-        Object.assign(insights, instagramInsightsMap(data));
-      } catch (singleMetricError) {
-        pushInstagramDebug(debug, {
-          stage: 'insights_error',
-          mediaId: media.id,
-          path,
-          params: { metric: metricName },
-          message: singleMetricError.message,
-        });
-      }
-    }
+    await requestSingleMetrics(metricNames, 'fill missing metric after batch response');
   }
 
-  return mergeInstagramInsights(existingInsights, insights);
+  const merged = mergeInstagramInsights(existingInsights, insights);
+  diagnostics.availableMetrics = Object.keys(merged)
+    .filter((metricName) => nullableNumber(merged[metricName]) !== null);
+  diagnostics.missingSheetMetrics = [
+    instagramMetricFromInsights(merged, ['reach']) === null ? 'reach' : '',
+    instagramMetricFromInsights(merged, instagramImpressionMetricNames(media)) === null ? 'impressions/views' : '',
+    ['Live', 'Reels', 'Video'].includes(instagramContentType(media))
+      && instagramMetricFromInsights(merged, ['views']) === null ? 'video views' : '',
+  ].filter(Boolean);
+
+  return { values: merged, diagnostics };
 }
 
 function instagramMetricFromInsights(insights, names) {
@@ -1673,6 +1693,36 @@ function instagramMetricFromInsights(insights, names) {
     if (value !== null) return value;
   }
   return null;
+}
+
+function instagramInsightDiagnosticSummary(diagnostics = {}) {
+  const missingMetrics = diagnostics.missingSheetMetrics || [];
+  const criticalMetricNames = uniqueValues([
+    missingMetrics.includes('reach') ? 'reach' : '',
+    missingMetrics.includes('impressions/views') ? 'impressions' : '',
+    missingMetrics.includes('impressions/views') ? 'views' : '',
+    missingMetrics.includes('video views') ? 'views' : '',
+  ]);
+  const hasCriticalMetric = (item) => !criticalMetricNames.length
+    || (item.metrics || []).some((metricName) => criticalMetricNames.includes(metricName));
+  const error = (diagnostics.errors || []).find(hasCriticalMetric)
+    || (diagnostics.errors || [])[0];
+  if (error) {
+    const metrics = (error.metrics || []).join(', ') || 'metrics';
+    return `${metrics}: ${error.message}`;
+  }
+  const emptyResponse = (diagnostics.emptyResponses || []).find(hasCriticalMetric)
+    || (diagnostics.emptyResponses || [])[0];
+  if (emptyResponse) {
+    const metrics = (emptyResponse.metrics || []).join(', ') || 'metrics';
+    return `${metrics}: Meta returned an empty insights dataset`;
+  }
+  const missing = missingMetrics.join(', ');
+  return missing ? `missing ${missing}` : '';
+}
+
+function uniqueValues(values = []) {
+  return values.filter((value, index, all) => value && all.indexOf(value) === index);
 }
 
 function sumPresentNumbers(values) {
@@ -1720,6 +1770,7 @@ async function discoverInstagramRows(config) {
   const untilMs = end.getTime();
   const discovered = await discoverInstagramAccounts(config);
   const errors = [...discovered.errors];
+  const warnings = [];
   pushInstagramDebug(debug, {
     stage: 'sync_window',
     start: start.toISOString(),
@@ -1750,6 +1801,10 @@ async function discoverInstagramRows(config) {
         mediaSkippedOlder: 0,
         mediaSkippedInvalid: 0,
         rowsCreated: 0,
+        rowsMissingReach: 0,
+        rowsMissingImpressions: 0,
+        rowsMissingVideoViews: 0,
+        insightProblemSamples: [],
       };
 
       while (keepGoing) {
@@ -1804,22 +1859,49 @@ async function discoverInstagramRows(config) {
           stats.mediaInRange += 1;
           const type = instagramContentType(media);
           const expandedInsights = instagramExpandedInsightsFromMedia(media);
-          const insights = await getInstagramInsightsForMedia(
+          const insightResult = await getInstagramInsightsForMedia(
             media,
             account.accessToken,
             debug,
             expandedInsights,
           );
+          const insights = insightResult.values || {};
+          const insightDiagnostics = insightResult.diagnostics || {};
           const isVideo = ['Live', 'Reels', 'Video'].includes(type);
           const isStory = type === 'Stories';
           const reach = instagramMetricFromInsights(insights, ['reach']);
           const viewsOrImpressions = instagramMetricFromInsights(
             insights,
-            ['views', 'impressions', 'plays', 'video_views'],
+            instagramImpressionMetricNames(media),
           );
           const fallbackInteractions = toNumber(media.like_count) + toNumber(media.comments_count);
           const interactions = instagramInteractionTotal(media, insights, isStory) ?? fallbackInteractions;
-          const videoViews = isVideo ? viewsOrImpressions : null;
+          const videoViews = isVideo ? instagramMetricFromInsights(insights, ['views']) : null;
+          const missingSheetMetrics = [
+            reach === null ? 'reach' : '',
+            viewsOrImpressions === null ? 'impressions/views' : '',
+            isVideo && videoViews === null ? 'video views' : '',
+          ].filter(Boolean);
+          if (missingSheetMetrics.length) {
+            if (reach === null) stats.rowsMissingReach += 1;
+            if (viewsOrImpressions === null) stats.rowsMissingImpressions += 1;
+            if (isVideo && videoViews === null) stats.rowsMissingVideoViews += 1;
+            const sample = instagramInsightDiagnosticSummary(insightDiagnostics);
+            if (sample && stats.insightProblemSamples.length < 3) {
+              stats.insightProblemSamples.push({
+                mediaId: media.id,
+                missing: missingSheetMetrics,
+                reason: sample,
+              });
+            }
+            pushInstagramDebug(debug, {
+              stage: 'insights_missing_sheet_metrics',
+              mediaId: media.id,
+              type,
+              missing: missingSheetMetrics,
+              diagnostics: insightDiagnostics,
+            });
+          }
 
           rows.push({
             key: `instagram:${media.id}`,
@@ -1846,6 +1928,7 @@ async function discoverInstagramRows(config) {
               videoViews,
               saved: instagramMetricFromInsights(insights, ['saved', 'saves']),
               insights,
+              insightDiagnostics,
             },
           });
           stats.rowsCreated += 1;
@@ -1860,6 +1943,19 @@ async function discoverInstagramRows(config) {
 
         after = data?.paging?.cursors?.after || '';
         if (!after) break;
+      }
+      const missingParts = [
+        stats.rowsMissingReach ? `${stats.rowsMissingReach} missing Reach` : '',
+        stats.rowsMissingImpressions ? `${stats.rowsMissingImpressions} missing Impressions/Views` : '',
+        stats.rowsMissingVideoViews ? `${stats.rowsMissingVideoViews} missing Video View` : '',
+      ].filter(Boolean);
+      if (missingParts.length) {
+        const sampleReason = stats.insightProblemSamples[0]?.reason || '';
+        warnings.push({
+          platform: 'instagram',
+          accountId: account.accountId,
+          message: `Instagram did not return sheet metrics for ${missingParts.join(', ')} out of ${stats.rowsCreated} row(s). ${sampleReason ? `First issue: ${sampleReason}. ` : ''}Open Instagram Debug to inspect the raw /insights responses.`,
+        });
       }
       pushInstagramDebug(debug, {
         stage: 'account_sync_complete',
@@ -1879,7 +1975,7 @@ async function discoverInstagramRows(config) {
     }
   }
 
-  return { rows, errors, debug };
+  return { rows, errors, warnings, debug };
 }
 
 async function youtubeApi(configId, path, params) {
@@ -2847,13 +2943,64 @@ async function tiktokTokenRequest(params) {
   return data;
 }
 
-async function saveTikTokTokenSecret(accountId, tokenData) {
-  const expiresAt = Date.now() + toNumber(tokenData.expires_in, 0) * 1000;
+async function tiktokBusinessTokenRequest(path, params) {
+  const response = await fetch(`https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/${path}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.code) {
+    throw new Error(data?.message || data?.msg || `TikTok Business OAuth error ${response.status}`);
+  }
+  return data?.data || {};
+}
+
+async function exchangeTikTokOAuthCode({ clientKey, clientSecret, code, redirectUri }) {
+  const errors = [];
+  try {
+    const tokenData = await tiktokTokenRequest({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+    return { tokenData, apiFamily: 'display' };
+  } catch (error) {
+    errors.push(`Display API: ${error.message}`);
+  }
+
+  try {
+    const tokenData = await tiktokBusinessTokenRequest('token', {
+      client_id: clientKey,
+      client_secret: clientSecret,
+      auth_code: code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+    return { tokenData, apiFamily: 'business' };
+  } catch (error) {
+    errors.push(`Business API: ${error.message}`);
+  }
+
+  throw new Error(`TikTok token exchange failed. ${errors.join(' | ')}`);
+}
+
+async function saveTikTokTokenSecret(accountId, tokenData, apiFamily = 'display', existingTokens = {}) {
+  const expiresIn = toNumber(tokenData.expires_in, toNumber(existingTokens.expires_in, 0));
+  const expiresAt = Date.now() + expiresIn * 1000;
+  const refreshExpiresIn = toNumber(tokenData.refresh_token_expires_in, 0);
   const payload = {
-    access_token: tokenData.access_token,
-    refresh_token: tokenData.refresh_token,
+    access_token: tokenData.access_token || existingTokens.access_token,
+    refresh_token: tokenData.refresh_token || existingTokens.refresh_token,
     expires_at: expiresAt,
+    expires_in: expiresIn,
+    api_family: apiFamily || existingTokens.api_family || 'display',
+    scope: tokenData.scope || existingTokens.scope || '',
+    open_id: tokenData.open_id || existingTokens.open_id || '',
   };
+  if (refreshExpiresIn) payload.refresh_token_expires_at = Date.now() + refreshExpiresIn * 1000;
   await db().collection('social_account_secrets').doc(accountId).set({
     tokens: JSON.stringify(payload),
     updatedAt: FieldValue.serverTimestamp(),
@@ -2864,19 +3011,37 @@ async function getTikTokAccessToken(configId, accountId) {
   const secretSnap = await db().collection('social_account_secrets').doc(accountId).get();
   if (!secretSnap.exists) throw new Error(`Missing TikTok token for ${accountId}`);
   const tokens = JSON.parse(secretSnap.data()?.tokens || '{}');
+  const apiFamily = tokens.api_family || 'display';
   if (tokens.expires_at && tokens.expires_at > Date.now() + 5 * 60 * 1000) {
-    return tokens.access_token;
+    return {
+      accessToken: tokens.access_token,
+      apiFamily,
+      openId: tokens.open_id,
+      scope: tokens.scope,
+    };
   }
 
   const { clientKey, clientSecret } = await getTikTokClientConfig(configId);
-  const refreshed = await tiktokTokenRequest({
-    client_key: clientKey,
-    client_secret: clientSecret,
-    grant_type: 'refresh_token',
-    refresh_token: tokens.refresh_token,
-  });
-  await saveTikTokTokenSecret(accountId, refreshed);
-  return refreshed.access_token;
+  const refreshed = apiFamily === 'business'
+    ? await tiktokBusinessTokenRequest('refresh_token', {
+      client_id: clientKey,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+    })
+    : await tiktokTokenRequest({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+    });
+  await saveTikTokTokenSecret(accountId, refreshed, apiFamily, tokens);
+  return {
+    accessToken: refreshed.access_token || tokens.access_token,
+    apiFamily,
+    openId: refreshed.open_id || tokens.open_id,
+    scope: refreshed.scope || tokens.scope,
+  };
 }
 
 async function tiktokApi(path, accessToken, fields, body = {}) {
@@ -2895,6 +3060,24 @@ async function tiktokApi(path, accessToken, fields, body = {}) {
   return data;
 }
 
+async function tiktokBusinessApi(path, accessToken, params = {}) {
+  const url = new URL(`https://business-api.tiktok.com/open_api/v1.3/${path}/`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'Access-Token': accessToken },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.code) {
+    throw new Error(data?.message || data?.msg || `TikTok Business API error on ${path}`);
+  }
+  return data;
+}
+
 async function queryTikTokVideoMetrics(accessToken, videoIds, fields) {
   if (!videoIds.length) return new Map();
   try {
@@ -2906,6 +3089,88 @@ async function queryTikTokVideoMetrics(accessToken, videoIds, fields) {
   } catch (_) {
     return new Map();
   }
+}
+
+function normalizeTikTokBusinessType(mediaType) {
+  const normalized = String(mediaType || '').toUpperCase();
+  if (normalized === 'VIDEO') return 'Video';
+  if (normalized === 'PHOTO') return 'Post';
+  return 'Post';
+}
+
+async function discoverTikTokBusinessRowsForAccount({ accessToken, businessId, config, sinceMs, untilMs }) {
+  if (!businessId) throw new Error('TikTok Business account id is missing');
+  const rows = [];
+  let cursor = undefined;
+  let keepGoing = true;
+  const fields = [
+    'item_id',
+    'media_type',
+    'create_time',
+    'share_url',
+    'caption',
+    'video_views',
+    'likes',
+    'comments',
+    'shares',
+    'reach',
+  ];
+
+  while (keepGoing) {
+    const data = await tiktokBusinessApi('business/video/list', accessToken, {
+      business_id: businessId,
+      fields: JSON.stringify(fields),
+      max_count: 20,
+      ...(cursor ? { cursor } : {}),
+    });
+    const posts = data?.data?.videos || [];
+    for (const post of posts) {
+      const contentId = post.item_id;
+      if (!contentId) continue;
+      const createdAt = isoFromSeconds(post.create_time);
+      const createdAtMs = dateValueMillis(createdAt);
+      if (createdAtMs === null) continue;
+      if (createdAtMs > untilMs) continue;
+      if (createdAtMs < sinceMs) {
+        keepGoing = false;
+        continue;
+      }
+      const views = toNumber(post.video_views);
+      const reach = toNumber(post.reach);
+      const interactions = toNumber(post.likes) + toNumber(post.comments) + toNumber(post.shares);
+      rows.push({
+        key: `tiktok:${contentId}`,
+        platform: 'TikTok',
+        contentId,
+        createdAt,
+        link: post.share_url || '',
+        row: [
+          formatSheetDate(createdAt, config.timezone),
+          post.caption || contentId,
+          'TikTok',
+          normalizeTikTokBusinessType(post.media_type),
+          post.share_url || '',
+          numberOrDash(reach),
+          numberOrDash(views),
+          numberOrDash(interactions),
+          numberOrDash(views),
+          '-',
+        ],
+        metrics: {
+          reach,
+          impressions: views,
+          views,
+          interactions,
+          mediaType: post.media_type || '',
+          tiktokApiFamily: 'business',
+        },
+      });
+    }
+    cursor = data?.data?.cursor;
+    keepGoing = keepGoing && Boolean(data?.data?.has_more && cursor);
+  }
+
+  return rows;
 }
 
 async function discoverTikTokRows(configId, config) {
@@ -2924,7 +3189,19 @@ async function discoverTikTokRows(configId, config) {
     const account = { id: accountDoc.id, ...accountDoc.data() };
     if (selectedAccountIds.size && !selectedAccountIds.has(String(account.id))) continue;
     try {
-      const accessToken = await getTikTokAccessToken(configId, account.id);
+      const tokenInfo = await getTikTokAccessToken(configId, account.id);
+      const accessToken = tokenInfo.accessToken;
+      if (tokenInfo.apiFamily === 'business') {
+        rows.push(...await discoverTikTokBusinessRowsForAccount({
+          accessToken,
+          businessId: account.accountId || tokenInfo.openId,
+          config,
+          sinceMs,
+          untilMs,
+        }));
+        continue;
+      }
+
       let cursor = undefined;
       let keepGoing = true;
       const fields = 'id,create_time,share_url,video_description,title,like_count,comment_count,share_count,view_count,duration';
@@ -2972,7 +3249,7 @@ async function discoverTikTokRows(configId, config) {
               numberOrDash(views),
               '-',
             ],
-            metrics: { views, interactions },
+            metrics: { views, impressions: views, interactions, tiktokApiFamily: 'display' },
           });
         }
         cursor = data?.data?.cursor;
@@ -3214,7 +3491,9 @@ async function getTikTokFollowerAccounts(configId, config) {
     const account = { id: accountDoc.id, ...accountDoc.data() };
     if (selectedAccountIds.size && !selectedAccountIds.has(String(account.id))) continue;
     try {
-      const accessToken = await getTikTokAccessToken(configId, account.id);
+      const tokenInfo = await getTikTokAccessToken(configId, account.id);
+      if (tokenInfo.apiFamily === 'business') continue;
+      const accessToken = tokenInfo.accessToken;
       const user = await tiktokUserInfo(accessToken);
       const followers = nullableNumber(user?.follower_count);
       if (followers !== null) {
@@ -4075,9 +4354,16 @@ export const oauthCallbackTikTok = onRequest({ cors: true, maxInstances: 10 }, a
   if (req.method !== 'GET') return jsonError(res, 405, 'Method not allowed. Use GET.');
 
   try {
-    const { code, state, error, error_description: errorDescription } = req.query || {};
+    const {
+      code,
+      auth_code: authCode,
+      state,
+      error,
+      error_description: errorDescription,
+    } = req.query || {};
     if (error) throw new Error(errorDescription || error);
-    if (!code || !state) throw new Error('Missing TikTok code or state');
+    const oauthCode = code || authCode;
+    if (!oauthCode || !state) throw new Error('Missing TikTok code or state');
 
     const stateRef = db().collection('oauth_states').doc(String(state));
     const stateSnap = await stateRef.get();
@@ -4086,19 +4372,20 @@ export const oauthCallbackTikTok = onRequest({ cors: true, maxInstances: 10 }, a
     if (stateData.expiresAt?.toDate?.() < new Date()) throw new Error('OAuth state expired');
 
     const { clientKey, clientSecret, redirectUri } = await getTikTokClientConfig(stateData.configId);
-    const tokenData = await tiktokTokenRequest({
-      client_key: clientKey,
-      client_secret: clientSecret,
-      code: String(code),
-      grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
+    const { tokenData, apiFamily } = await exchangeTikTokOAuthCode({
+      clientKey,
+      clientSecret,
+      code: String(oauthCode),
+      redirectUri,
     });
     const accountId = `tiktok_${sanitizeDocId(tokenData.open_id)}`;
-    await saveTikTokTokenSecret(accountId, tokenData);
+    await saveTikTokTokenSecret(accountId, tokenData, apiFamily);
     await db().collection('social_accounts').doc(accountId).set({
       platform: 'tiktok',
       accountId: tokenData.open_id,
       displayName: tokenData.open_id,
+      apiFamily,
+      scope: tokenData.scope || '',
       connectedBy: stateData.uid,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
