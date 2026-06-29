@@ -11,6 +11,11 @@ const DEFAULT_TIMEZONE = 'Asia/Rangoon';
 const DEFAULT_TIKTOK_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackTikTok';
 const DEFAULT_YOUTUBE_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackYouTube';
 const DEFAULT_INSTAGRAM_REDIRECT_URI = 'https://us-central1-gcc-live-count.cloudfunctions.net/oauthCallbackInstagram';
+const YOUTUBE_REACH_REPORT_TYPE_ID = 'channel_reach_basic_a1';
+const YOUTUBE_REACH_REPORT_JOB_NAME = 'Sheet Sync YouTube Reach';
+const YOUTUBE_REACH_CACHE_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const FACEBOOK_POST_FIELDS = 'id,created_time,message,story,permalink_url,status_type,attachments{media_type}';
+const FACEBOOK_POST_FIELDS_BASIC = 'id,created_time,message,story,permalink_url,status_type';
 const INSTAGRAM_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url,followers_count,media_count';
 const INSTAGRAM_BASIC_PROFILE_FIELDS = 'id,user_id,username,name,account_type,profile_picture_url';
 const INSTAGRAM_DIRECT_SCOPES = [
@@ -24,9 +29,10 @@ const SHEET_HEADERS = [
   'Type',
   'Link',
   'Reach',
-  'Views / Impression',
+  'Impressions',
   'Interactions',
   'Video View',
+  'CTR',
 ];
 const FOLLOWER_HEADERS = [
   'Date Range',
@@ -170,8 +176,13 @@ function formatSheetDate(dateValue, timezone = DEFAULT_TIMEZONE) {
 
 function isoFromSeconds(value) {
   const seconds = Number(value);
-  if (!Number.isFinite(seconds)) return new Date().toISOString();
+  if (!Number.isFinite(seconds)) return '';
   return new Date(seconds * 1000).toISOString();
+}
+
+function dateValueMillis(value) {
+  const millis = new Date(value || '').getTime();
+  return Number.isFinite(millis) ? millis : null;
 }
 
 function isoDateOnly(value) {
@@ -704,12 +715,61 @@ async function ensureHeadersForTab(configId, config, tabName, headers) {
 
 async function ensureSheetHeaders(configId, config) {
   const row = Number(config.headerRow || 1);
-  const current = await sheetsFetch(configId, config, 'GET', `A${row}:I${row}`);
+  await ensureWorksheetExists(configId, config, config.sheetTab || 'Sheet1');
+  const current = await sheetsFetch(configId, config, 'GET', `A${row}:J${row}`);
   const existing = current?.values?.[0] || [];
   const missing = SHEET_HEADERS.some((header, index) => existing[index] !== header);
   if (missing) {
-    await sheetsFetch(configId, config, 'PUT', `A${row}:I${row}`, { values: [SHEET_HEADERS] });
+    await sheetsFetch(configId, config, 'PUT', `A${row}:J${row}`, { values: [SHEET_HEADERS] });
   }
+  await applyContentSheetFormats(configId, config);
+}
+
+async function applyContentSheetFormats(configId, config) {
+  const sheetId = await ensureWorksheetExists(configId, config, config.sheetTab || 'Sheet1');
+  const startRowIndex = Number(config.headerRow || 1);
+  await sheetsSpreadsheetRequest(configId, config, 'POST', {
+    requests: [
+      {
+        repeatCell: {
+          range: {
+            sheetId,
+            startRowIndex,
+            startColumnIndex: 5,
+            endColumnIndex: 9,
+          },
+          cell: {
+            userEnteredFormat: {
+              numberFormat: {
+                type: 'NUMBER',
+                pattern: '#,##0',
+              },
+            },
+          },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      },
+      {
+        repeatCell: {
+          range: {
+            sheetId,
+            startRowIndex,
+            startColumnIndex: 9,
+            endColumnIndex: 10,
+          },
+          cell: {
+            userEnteredFormat: {
+              numberFormat: {
+                type: 'PERCENT',
+                pattern: '0.00%',
+              },
+            },
+          },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      },
+    ],
+  });
 }
 
 async function ensureFollowerSheetHeaders(configId, config) {
@@ -732,14 +792,14 @@ async function ensureFollowerSheetHeaders(configId, config) {
 async function writeSheetRowsAt(configId, config, startRow, rows) {
   if (!rows.length) return;
   await sheetsBatchUpdate(configId, config, [{
-    range: rangeFor(config, `A${startRow}:I${startRow + rows.length - 1}`),
+    range: rangeFor(config, `A${startRow}:J${startRow + rows.length - 1}`),
     values: rows,
   }]);
 }
 
 async function rewriteContentSheetRows(configId, config, discoveredRows) {
   const startRow = Number(config.headerRow || 1) + 1;
-  const sheetValues = await sheetsFetch(configId, config, 'GET', 'A:I');
+  const sheetValues = await sheetsFetch(configId, config, 'GET', 'A:J');
   const lastValueRow = Math.max(Number(config.headerRow || 1), sheetValues?.values?.length || 0);
   const clearEndRow = Math.max(
     lastValueRow,
@@ -747,7 +807,7 @@ async function rewriteContentSheetRows(configId, config, discoveredRows) {
   );
 
   await sheetsBatchClear(configId, config, [
-    rangeFor(config, `A${startRow}:I${clearEndRow}`),
+    rangeFor(config, `A${startRow}:J${clearEndRow}`),
   ]);
 
   if (discoveredRows.length) {
@@ -776,6 +836,44 @@ async function fbGet(path, token, params = {}) {
     throw new Error(apiErrorMessage(data, `Facebook API error on ${path}`));
   }
   return data;
+}
+
+function isFacebookDeprecatedAttachmentFieldError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('deprecate_post_aggregated_fields_for_attachement')
+    || (message.includes('deprecated') && message.includes('attachment'));
+}
+
+async function fetchFacebookPosts(page, since, until) {
+  const baseParams = {
+    since: String(since),
+    until: String(until),
+    limit: '50',
+  };
+
+  try {
+    return {
+      data: await fbGet(`${page.id}/posts`, page.access_token, {
+        ...baseParams,
+        fields: FACEBOOK_POST_FIELDS,
+      }),
+      warnings: [],
+    };
+  } catch (error) {
+    if (!isFacebookDeprecatedAttachmentFieldError(error)) throw error;
+    const data = await fbGet(`${page.id}/posts`, page.access_token, {
+      ...baseParams,
+      fields: FACEBOOK_POST_FIELDS_BASIC,
+    });
+    return {
+      data,
+      warnings: [{
+        platform: 'facebook',
+        accountId: page.id,
+        message: 'Facebook rejected attachment media fields as deprecated, so this run used basic post fields for Facebook content type detection.',
+      }],
+    };
+  }
 }
 
 async function igDirectGet(path, token, params = {}) {
@@ -808,59 +906,44 @@ function facebookContentType(post) {
   const attachment = post?.attachments?.data?.[0] || {};
   const mediaType = String(attachment.media_type || '').toLowerCase();
   const statusType = String(post?.status_type || '').toLowerCase();
-  const postType = String(post?.type || '').toLowerCase();
-  const permalink = String(post?.permalink_url || '').toLowerCase();
-  const attachmentUrl = String(attachment.url || '').toLowerCase();
-  const sourceHints = [
-    post?.type,
-    post?.video?.status,
-    post?.live_status,
-    attachment.type,
-  ].map((value) => String(value || '').toLowerCase());
-  const combinedHints = [
-    mediaType,
-    statusType,
-    permalink,
-    attachmentUrl,
-    ...sourceHints,
-  ].join(' ');
 
-  if (
-    statusType === 'live_video' ||
-    statusType.includes('live') ||
-    postType.includes('live') ||
-    combinedHints.includes('live_video') ||
-    combinedHints.includes('live video') ||
-    combinedHints.includes('/live/') ||
-    combinedHints.includes('/videos/live/')
-  ) {
+  if (statusType === 'live_video' || mediaType === 'live_video') {
     return 'Live';
   }
 
   if (
-    mediaType.includes('reel') ||
-    mediaType.includes('short') ||
-    permalink.includes('/reel/') ||
-    permalink.includes('/reels/') ||
-    attachmentUrl.includes('/reel/') ||
-    attachmentUrl.includes('/reels/') ||
-    combinedHints.includes('short_video')
+    mediaType === 'reel' ||
+    mediaType === 'reels' ||
+    statusType === 'reel' ||
+    statusType === 'reels'
   ) {
     return 'Reels';
   }
 
-  if (
-    mediaType.includes('video') ||
-    postType.includes('video') ||
-    statusType.includes('video') ||
-    permalink.includes('/videos/') ||
-    attachmentUrl.includes('/videos/') ||
-    sourceHints.includes('video')
-  ) {
+  if (mediaType === 'video' || statusType === 'added_video') {
     return 'Video';
   }
 
-  return 'Static';
+  if (
+    ['album', 'link', 'photo', 'status'].includes(mediaType) ||
+    [
+      'added_photos',
+      'app_created_story',
+      'approved_friend',
+      'created_event',
+      'created_group',
+      'created_note',
+      'mobile_status_update',
+      'published_story',
+      'shared_story',
+      'tagged_in_photo',
+      'wall_post',
+    ].includes(statusType)
+  ) {
+    return 'Post';
+  }
+
+  return 'Unknown';
 }
 
 function facebookTitle(post) {
@@ -875,7 +958,10 @@ function facebookTitle(post) {
 async function discoverFacebookRows(config) {
   const rows = [];
   const errors = [];
+  const warnings = [];
   const { start, end } = getSyncWindow(config);
+  const sinceMs = start.getTime();
+  const untilMs = end.getTime();
   const since = Math.floor(start.getTime() / 1000);
   const until = Math.floor(end.getTime() / 1000);
   const pagesSnap = await db().collection('pages').get();
@@ -894,15 +980,15 @@ async function discoverFacebookRows(config) {
     }, { merge: true });
 
     try {
-      const postsResp = await fbGet(`${page.id}/posts`, page.access_token, {
-        fields: 'id,created_time,message,story,permalink_url,attachments{media_type,type,url,target}',
-        since: String(since),
-        until: String(until),
-        limit: '50',
-      });
+      const { data: postsResp, warnings: postWarnings } = await fetchFacebookPosts(page, since, until);
+      warnings.push(...postWarnings);
 
       for (const post of postsResp?.data || []) {
+        const createdAtMs = dateValueMillis(post.created_time);
+        if (createdAtMs === null || createdAtMs > untilMs || createdAtMs < sinceMs) continue;
+
         const type = facebookContentType(post);
+        const isVideoLikeType = ['Live', 'Reels', 'Video'].includes(type);
         const [reach, impressions, videoViews, interactions] = await Promise.all([
           tryFacebookMetric(post.id, page.access_token, [
             'post_impressions_unique',
@@ -912,12 +998,12 @@ async function discoverFacebookRows(config) {
             'post_impressions',
             'post_media_view',
           ]),
-          type === 'Static'
-            ? Promise.resolve(null)
-            : tryFacebookMetric(post.id, page.access_token, [
+          isVideoLikeType
+            ? tryFacebookMetric(post.id, page.access_token, [
               'post_video_views',
               'post_media_view',
-            ]),
+            ])
+            : Promise.resolve(null),
           tryFacebookMetric(post.id, page.access_token, [
             'post_activity_by_action_type',
             'post_reactions_by_type_total',
@@ -939,9 +1025,17 @@ async function discoverFacebookRows(config) {
             numberOrDash(reach),
             numberOrDash(impressions),
             numberOrDash(interactions),
-            type === 'Static' ? '-' : numberOrDash(videoViews),
+            isVideoLikeType ? numberOrDash(videoViews) : '-',
+            '-',
           ],
-          metrics: { reach, impressions, interactions, videoViews },
+          metrics: {
+            reach,
+            impressions,
+            interactions,
+            videoViews,
+            rawMediaType: post?.attachments?.data?.[0]?.media_type || '',
+            rawStatusType: post?.status_type || '',
+          },
         });
       }
     } catch (error) {
@@ -949,7 +1043,7 @@ async function discoverFacebookRows(config) {
     }
   }
 
-  return { rows, errors };
+  return { rows, errors, warnings };
 }
 
 function instagramAccountDocId(igUserId) {
@@ -1267,7 +1361,7 @@ function instagramContentType(media) {
   if (mediaProductType.includes('stor')) return 'Stories';
   if (mediaType.includes('video')) return 'Video';
   if (mediaType.includes('carousel')) return 'Carousel';
-  return 'Static';
+  return 'Post';
 }
 
 function instagramTitle(media) {
@@ -1654,6 +1748,7 @@ async function discoverInstagramRows(config) {
         mediaInRange: 0,
         mediaSkippedNewer: 0,
         mediaSkippedOlder: 0,
+        mediaSkippedInvalid: 0,
         rowsCreated: 0,
       };
 
@@ -1671,8 +1766,17 @@ async function discoverInstagramRows(config) {
         if (!mediaItems.length) break;
 
         for (const media of mediaItems) {
-          const createdAt = media?.timestamp || new Date().toISOString();
-          const createdAtMs = new Date(createdAt).getTime();
+          const createdAt = media?.timestamp || '';
+          const createdAtMs = dateValueMillis(createdAt);
+          if (createdAtMs === null) {
+            stats.mediaSkippedInvalid += 1;
+            pushInstagramDebug(debug, {
+              stage: 'media_skipped',
+              mediaId: media.id,
+              reason: 'missing or invalid created timestamp',
+            });
+            continue;
+          }
           if (createdAtMs > untilMs) {
             stats.mediaSkippedNewer += 1;
             pushInstagramDebug(debug, {
@@ -1733,6 +1837,7 @@ async function discoverInstagramRows(config) {
               numberOrDash(viewsOrImpressions),
               numberOrDash(interactions),
               isVideo ? numberOrDash(videoViews) : '-',
+              '-',
             ],
             metrics: {
               reach,
@@ -1824,25 +1929,50 @@ async function getYouTubeChannelProfile(accessToken, channelIdOrHandle) {
   };
 }
 
-function parseYouTubeDurationSeconds(duration) {
-  if (!duration || typeof duration !== 'string') return null;
-  const match = duration.match(/^P(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
-  if (!match) return null;
-  const hours = toNumber(match[1], 0);
-  const minutes = toNumber(match[2], 0);
-  const seconds = toNumber(match[3], 0);
-  return (hours * 60 * 60) + (minutes * 60) + seconds;
+function youtubeDashboardVideoFields(video) {
+  const liveBroadcastContent = String(video?.snippet?.liveBroadcastContent || '').toLowerCase();
+  const isLive = Boolean(video?.liveStreamingDetails)
+    || liveBroadcastContent === 'live'
+    || liveBroadcastContent === 'upcoming';
+  if (isLive) {
+    return {
+      type: 'Live',
+      link: `https://www.youtube.com/watch?v=${video.id}`,
+    };
+  }
+  return {
+    type: 'Video',
+    link: `https://youtu.be/${video.id}`,
+  };
 }
 
-function classifyYouTubeVideo(video) {
-  if (video?.liveStreamingDetails) {
-    return { type: 'Live', link: `https://www.youtube.com/watch?v=${video.id}` };
+function youtubeCreatorContentTypeFields(video, creatorContentType) {
+  const type = String(creatorContentType || '').toUpperCase();
+  if (type === 'SHORTS') {
+    return {
+      type: 'Short Video',
+      link: `https://www.youtube.com/shorts/${video.id}`,
+    };
   }
-  const durationSeconds = parseYouTubeDurationSeconds(video?.contentDetails?.duration);
-  if (durationSeconds != null && durationSeconds <= 180) {
-    return { type: 'Short Video', link: `https://www.youtube.com/shorts/${video.id}` };
+  if (type === 'VIDEO_ON_DEMAND') {
+    return {
+      type: 'Video',
+      link: `https://youtu.be/${video.id}`,
+    };
   }
-  return { type: 'Video', link: `https://www.youtube.com/watch?v=${video.id}` };
+  if (type === 'LIVE_STREAM') {
+    return {
+      type: 'Live',
+      link: `https://www.youtube.com/watch?v=${video.id}`,
+    };
+  }
+  if (type === 'STORY') {
+    return {
+      type: 'Story',
+      link: `https://youtu.be/${video.id}`,
+    };
+  }
+  return youtubeDashboardVideoFields(video);
 }
 
 async function listYouTubeUploadVideoIds(accessToken, uploadsPlaylistId, sinceIso, untilIso) {
@@ -1869,9 +1999,9 @@ async function listYouTubeUploadVideoIds(accessToken, uploadsPlaylistId, sinceIs
     for (const item of items) {
       const videoId = item?.contentDetails?.videoId;
       const publishedAt = item?.contentDetails?.videoPublishedAt || item?.snippet?.publishedAt;
-      const publishedMs = new Date(publishedAt || '').getTime();
+      const publishedMs = dateValueMillis(publishedAt);
 
-      if (!videoId || !Number.isFinite(publishedMs)) continue;
+      if (!videoId || publishedMs === null) continue;
       if (publishedMs > untilMs) continue;
       if (publishedMs < sinceMs) {
         keepGoing = false;
@@ -1967,12 +2097,497 @@ async function youtubeAnalyticsQuery(accessToken, params) {
   return data;
 }
 
+async function youtubeDataApiDebugQuery(accessToken, path, params) {
+  const query = new URLSearchParams(params);
+  const endpoint = `https://www.googleapis.com/youtube/v3/${path}`;
+  const url = `${endpoint}?${query.toString()}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const rawText = await response.text().catch(() => '');
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch (_) {
+    data = { rawText };
+  }
+  return {
+    endpoint,
+    method: 'GET',
+    url,
+    params,
+    status: response.status,
+    ok: response.ok && !data?.error,
+    rawText,
+    response: data,
+  };
+}
+
 function analyticsColumnMap(data) {
   return Object.fromEntries((data?.columnHeaders || []).map((header, index) => [header.name, index]));
 }
 
 function analyticsNumber(row, columnMap, name) {
   return nullableNumber(row?.[columnMap[name]]);
+}
+
+async function queryYouTubeCreatorContentTypes(accessToken, channelId, videoIds, config = {}) {
+  const typeMap = new Map();
+  const warnings = [];
+  if (!videoIds.length) return { typeMap, warnings };
+
+  const startDate = isoDateOnly(config.startDate) || defaultStartDate();
+  const endDate = defaultEndDate();
+  const chunkSize = 100;
+
+  for (let index = 0; index < videoIds.length; index += chunkSize) {
+    const ids = videoIds.slice(index, index + chunkSize);
+    try {
+      const data = await youtubeAnalyticsQuery(accessToken, {
+        ids: `channel==${channelId}`,
+        startDate,
+        endDate,
+        metrics: 'views',
+        dimensions: 'video,creatorContentType',
+        filters: `video==${ids.join(',')}`,
+        maxResults: '200',
+      });
+      const columns = analyticsColumnMap(data);
+      for (const row of data?.rows || []) {
+        const videoId = row?.[columns.video];
+        const creatorContentType = row?.[columns.creatorContentType];
+        if (!videoId || !creatorContentType) continue;
+        const views = analyticsNumber(row, columns, 'views') || 0;
+        const previous = typeMap.get(videoId);
+        if (!previous || views >= previous.views) {
+          typeMap.set(videoId, { creatorContentType, views });
+        }
+      }
+    } catch (error) {
+      warnings.push(`YouTube Analytics creatorContentType lookup failed: ${error.message}. Type defaults to "Video" unless YouTube Data API marks the video as live.`);
+    }
+  }
+
+  return { typeMap, warnings };
+}
+
+async function youtubeReportingJson(accessToken, path, { method = 'GET', params = {}, body = null } = {}) {
+  const query = new URLSearchParams(params);
+  const url = `https://youtubereporting.googleapis.com/v1${path}${query.toString() ? `?${query.toString()}` : ''}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(data?.error?.message || `YouTube Reporting API error ${response.status}`);
+  }
+  return data;
+}
+
+async function youtubeReportingText(accessToken, url) {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || `YouTube Reporting download error ${response.status}`);
+  }
+  return response.text();
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+
+  for (let index = 0; index < String(text || '').length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(field);
+      field = '';
+    } else if (char === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (char !== '\r') {
+      field += char;
+    }
+  }
+
+  if (field || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows.filter((items) => items.some((item) => String(item || '').trim()));
+}
+
+function reportingTimestamp(dateValue) {
+  const date = isoDateOnly(dateValue);
+  return date ? `${date}T00:00:00.000Z` : '';
+}
+
+function enumerateIsoDates(startDate, endDate) {
+  const start = isoDateOnly(startDate);
+  const end = isoDateOnly(endDate);
+  if (!start || !end || start > end) return [];
+  const dates = [];
+  let current = start;
+  while (current && current <= end) {
+    dates.push(current);
+    current = shiftIsoDate(current, 1);
+  }
+  return dates;
+}
+
+function youtubeReachCacheDayId(channelId, date) {
+  return `${sanitizeDocId(channelId)}_${date}`;
+}
+
+function youtubeReachCacheRangeId(channelId, startDate, endDate) {
+  return `${sanitizeDocId(channelId)}_${isoDateOnly(startDate)}_${isoDateOnly(endDate)}`;
+}
+
+function youtubeReachLifetimeCacheId(channelId) {
+  return `${sanitizeDocId(channelId)}_lifetime`;
+}
+
+function youtubeReachDayRef(channelId, date) {
+  return db().collection('youtube_reach_daily').doc(youtubeReachCacheDayId(channelId, date));
+}
+
+function youtubeReachRangeMetaRef(channelId, startDate, endDate) {
+  return db().collection('youtube_reach_cache_meta').doc(youtubeReachCacheRangeId(channelId, startDate, endDate));
+}
+
+function youtubeReachLifetimeMetaRef(channelId) {
+  return db().collection('youtube_reach_cache_meta').doc(youtubeReachLifetimeCacheId(channelId));
+}
+
+function timestampMillis(value) {
+  if (!value) return 0;
+  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function isFreshTimestamp(value, maxAgeMs = YOUTUBE_REACH_CACHE_REFRESH_INTERVAL_MS) {
+  const millis = timestampMillis(value);
+  return Boolean(millis && Date.now() - millis < maxAgeMs);
+}
+
+async function listAllYouTubeReportingJobs(accessToken) {
+  const jobs = [];
+  let pageToken = '';
+  do {
+    const data = await youtubeReportingJson(accessToken, '/jobs', {
+      params: {
+        pageSize: '100',
+        ...(pageToken ? { pageToken } : {}),
+      },
+    });
+    jobs.push(...(data.jobs || []));
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return jobs;
+}
+
+async function ensureYouTubeReachReportJob(accessToken) {
+  const jobs = await listAllYouTubeReportingJobs(accessToken);
+  const existing = jobs.find((job) => job.reportTypeId === YOUTUBE_REACH_REPORT_TYPE_ID);
+  if (existing) return { job: existing, created: false };
+
+  try {
+    const job = await youtubeReportingJson(accessToken, '/jobs', {
+      method: 'POST',
+      body: {
+        reportTypeId: YOUTUBE_REACH_REPORT_TYPE_ID,
+        name: YOUTUBE_REACH_REPORT_JOB_NAME,
+      },
+    });
+    return { job, created: true };
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('already exists')) {
+      throw error;
+    }
+    const refreshedJobs = await listAllYouTubeReportingJobs(accessToken);
+    const refreshed = refreshedJobs.find((job) => job.reportTypeId === YOUTUBE_REACH_REPORT_TYPE_ID);
+    if (refreshed) return { job: refreshed, created: false };
+    throw error;
+  }
+}
+
+async function listYouTubeReachReports(accessToken, jobId, config = {}) {
+  const reports = [];
+  let pageToken = '';
+  const startDate = isoDateOnly(config.startDate);
+  const endExclusive = shiftIsoDate(isoDateOnly(config.endDate), 1);
+  do {
+    const data = await youtubeReportingJson(accessToken, `/jobs/${encodeURIComponent(jobId)}/reports`, {
+      params: {
+        pageSize: '100',
+        ...(startDate ? { startTimeAtOrAfter: reportingTimestamp(startDate) } : {}),
+        ...(endExclusive ? { startTimeBefore: reportingTimestamp(endExclusive) } : {}),
+        ...(pageToken ? { pageToken } : {}),
+      },
+    });
+    reports.push(...(data.reports || []));
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return reports;
+}
+
+function addYouTubeReachMetric(target, impressions, ctr) {
+  const current = target || {
+    impressions: 0,
+    ctrWeightedSum: 0,
+    ctrWeight: 0,
+    ctrSum: 0,
+    ctrCount: 0,
+  };
+  const impressionValue = nullableNumber(impressions);
+  const ctrValue = nullableNumber(ctr);
+  if (impressionValue !== null) current.impressions += impressionValue;
+  if (ctrValue !== null && impressionValue !== null && impressionValue > 0) {
+    current.ctrWeightedSum += ctrValue * impressionValue;
+    current.ctrWeight += impressionValue;
+  } else if (ctrValue !== null) {
+    current.ctrSum += ctrValue;
+    current.ctrCount += 1;
+  }
+  return current;
+}
+
+function finalizeYouTubeReachMetric(value) {
+  if (!value) return null;
+  let viewsPerImpression = null;
+  if (value.ctrWeight > 0) {
+    viewsPerImpression = value.ctrWeightedSum / value.ctrWeight;
+  } else if (value.ctrCount > 0) {
+    viewsPerImpression = value.ctrSum / value.ctrCount;
+  }
+  return {
+    impressions: value.impressions || null,
+    viewsPerImpression,
+  };
+}
+
+async function readYouTubeReachCache(channelId, videoIds, config = {}) {
+  const videoIdSet = new Set(videoIds.map(String));
+  const reachMap = new Map();
+  if (!videoIdSet.size) return reachMap;
+
+  const useDateRange = config.scope !== 'lifetime' && config.startDate && config.endDate;
+  const snapshots = useDateRange
+    ? await Promise.all(enumerateIsoDates(config.startDate, config.endDate).map((date) => youtubeReachDayRef(channelId, date).get()))
+    : (await db().collection('youtube_reach_daily')
+      .where('channelId', '==', channelId)
+      .get()).docs;
+  const aggregate = new Map();
+
+  for (const snapshot of snapshots) {
+    if (!snapshot.exists) continue;
+    const data = snapshot.data() || {};
+    const metrics = data.metrics || {};
+    for (const videoId of videoIdSet) {
+      const metric = metrics[videoId];
+      if (!metric) continue;
+      aggregate.set(videoId, addYouTubeReachMetric(
+        aggregate.get(videoId),
+        metric.impressions,
+        metric.viewsPerImpression,
+      ));
+    }
+  }
+
+  for (const [videoId, value] of aggregate.entries()) {
+    const finalized = finalizeYouTubeReachMetric(value);
+    if (finalized) reachMap.set(videoId, finalized);
+  }
+
+  return reachMap;
+}
+
+async function getYouTubeReachCacheMeta(channelId, config = {}) {
+  const metaRef = config.scope === 'lifetime'
+    ? youtubeReachLifetimeMetaRef(channelId)
+    : youtubeReachRangeMetaRef(channelId, config.startDate, config.endDate);
+  const snap = await metaRef.get();
+  return snap.exists ? snap.data() : {};
+}
+
+async function writeYouTubeReachCache(channelId, metricsByDate, reportIds = []) {
+  const writes = [];
+  const refreshedAt = new Date().toISOString();
+  for (const [date, metrics] of metricsByDate.entries()) {
+    writes.push({
+      snapshotRef: youtubeReachDayRef(channelId, date),
+      payload: {
+        channelId,
+        date,
+        metrics,
+        reportIds: Array.from(new Set(reportIds)).filter(Boolean),
+        refreshedAt,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    });
+  }
+  await commitSnapshotWrites(writes);
+}
+
+async function refreshYouTubeReachCache(accessToken, channelId, videoIds, config = {}, { force = false } = {}) {
+  const videoIdSet = new Set(videoIds.map(String));
+  const warnings = [];
+  if (!videoIdSet.size) return { warnings, updatedRows: 0, reportCount: 0, skipped: true };
+
+  const lifetimeMode = config.scope === 'lifetime';
+  const startDate = lifetimeMode ? '' : isoDateOnly(config.startDate);
+  const endDate = lifetimeMode ? '' : isoDateOnly(config.endDate);
+  const metaRef = lifetimeMode
+    ? youtubeReachLifetimeMetaRef(channelId)
+    : youtubeReachRangeMetaRef(channelId, startDate, endDate);
+  const metaSnap = await metaRef.get();
+  const meta = metaSnap.exists ? metaSnap.data() : {};
+  if (!force && isFreshTimestamp(meta.lastRefreshAt)) {
+    return {
+      warnings,
+      updatedRows: 0,
+      reportCount: Number(meta.reportCount || 0),
+      skipped: true,
+    };
+  }
+
+  let jobState;
+  try {
+    jobState = await ensureYouTubeReachReportJob(accessToken);
+  } catch (error) {
+    warnings.push(`YouTube Reporting reach job unavailable: ${error.message}. Reach, Impressions, and CTR are shown as "-".`);
+    return { warnings, updatedRows: 0, reportCount: 0, skipped: false };
+  }
+
+  if (jobState.created) {
+    warnings.push('Created YouTube Reporting reach job. Google usually generates the first reach report within 24 hours, so Reach, Impressions, and CTR may be "-" until the next generated report.');
+  }
+
+  const reports = await listYouTubeReachReports(
+    accessToken,
+    jobState.job.id,
+    lifetimeMode ? {} : config,
+  );
+  await metaRef.set({
+    channelId,
+    cacheScope: lifetimeMode ? 'lifetime' : 'date_range',
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+    jobId: jobState.job.id,
+    jobCreated: Boolean(jobState.created),
+    reportCount: reports.length,
+    lastRefreshAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  if (!reports.length) {
+    warnings.push('No generated YouTube Reporting reach reports were available yet. Reach, Impressions, and CTR are shown as "-".');
+    return { warnings, updatedRows: 0, reportCount: 0, skipped: false };
+  }
+
+  const metricsByDate = new Map();
+  const reportIds = [];
+  let updatedRows = 0;
+  for (const report of reports) {
+    if (!report.downloadUrl) continue;
+    const csv = await youtubeReportingText(accessToken, report.downloadUrl);
+    if (report.id) reportIds.push(report.id);
+    const rows = parseCsvRows(csv);
+    const headers = rows.shift() || [];
+    const columns = Object.fromEntries(headers.map((header, index) => [header, index]));
+    for (const row of rows) {
+      const rowDate = row[columns.date];
+      const rowChannelId = row[columns.channel_id];
+      const videoId = row[columns.video_id];
+      if (!rowDate) continue;
+      if (!videoIdSet.has(String(videoId))) continue;
+      if (rowChannelId && channelId && rowChannelId !== channelId) continue;
+      if (startDate && rowDate && rowDate < startDate) continue;
+      if (endDate && rowDate && rowDate > endDate) continue;
+      const impressions = nullableNumber(row[columns.video_thumbnail_impressions]);
+      const viewsPerImpression = nullableNumber(row[columns.video_thumbnail_impressions_ctr]);
+      if (impressions === null && viewsPerImpression === null) continue;
+      const dateMetrics = metricsByDate.get(rowDate) || {};
+      dateMetrics[videoId] = {
+        impressions,
+        viewsPerImpression,
+        reportId: report.id || '',
+        reportStartTime: report.startTime || '',
+        reportEndTime: report.endTime || '',
+        refreshedAt: new Date().toISOString(),
+      };
+      metricsByDate.set(rowDate, dateMetrics);
+      updatedRows += 1;
+    }
+  }
+
+  if (!updatedRows) {
+    warnings.push('YouTube Reporting reach reports were found, but none matched these videos. Reach, Impressions, and CTR are shown as "-".');
+    return { warnings, updatedRows: 0, reportCount: reports.length, skipped: false };
+  }
+
+  await writeYouTubeReachCache(channelId, metricsByDate, reportIds);
+  await metaRef.set({
+    channelId,
+    cacheScope: lifetimeMode ? 'lifetime' : 'date_range',
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+    jobId: jobState.job.id,
+    reportCount: reports.length,
+    updatedRows,
+    cachedDates: Array.from(metricsByDate.keys()).sort(),
+    reportIds: Array.from(new Set(reportIds)).filter(Boolean),
+    lastSuccessfulRefreshAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { warnings, updatedRows, reportCount: reports.length, skipped: false };
+}
+
+async function queryYouTubeReachReportMetrics(accessToken, channelId, videoIds, config = {}, { forceRefresh = false } = {}) {
+  const warnings = [];
+  const cacheConfig = { ...config, scope: 'lifetime' };
+  let reachMap = await readYouTubeReachCache(channelId, videoIds, cacheConfig);
+  const meta = await getYouTubeReachCacheMeta(channelId, cacheConfig);
+  const shouldRefresh = forceRefresh || !isFreshTimestamp(meta.lastRefreshAt) || !reachMap.size;
+
+  if (shouldRefresh) {
+    const refreshResult = await refreshYouTubeReachCache(accessToken, channelId, videoIds, cacheConfig, { force: forceRefresh });
+    warnings.push(...refreshResult.warnings);
+    if (refreshResult.updatedRows) {
+      reachMap = await readYouTubeReachCache(channelId, videoIds, cacheConfig);
+    }
+  }
+
+  if (!reachMap.size) {
+    warnings.push('No cached YouTube reach data is available for these videos yet. Reach, Impressions, and CTR are shown as "-".');
+  }
+
+  return { reachMap, warnings };
 }
 
 async function getYouTubeSubscriberDelta(accessToken, channelId, startDate, endDate) {
@@ -2007,63 +2622,93 @@ async function estimateYouTubeSubscribersOnDate(accessToken, channelId, currentS
   };
 }
 
-async function queryYouTubeVideoMetrics(accessToken, channelId, videoIds, config) {
-  if (!videoIds.length) return new Map();
-  const result = new Map();
-  for (let index = 0; index < videoIds.length; index += 200) {
-    const ids = videoIds.slice(index, index + 200);
-    const baseParams = {
-      ids: `channel==${channelId}`,
-      startDate: config.startDate,
-      endDate: config.endDate,
-      dimensions: 'video',
-      filters: `video==${ids.join(',')}`,
-      maxResults: String(ids.length),
-    };
-    const data = await youtubeAnalyticsQuery(accessToken, {
-      ...baseParams,
-      metrics: 'views,likes,comments,shares',
-    });
-    const columns = analyticsColumnMap(data);
-    for (const row of data?.rows || []) {
-      const videoId = row[columns.video];
-      if (!videoId) continue;
-      const views = analyticsNumber(row, columns, 'views');
-      const likes = analyticsNumber(row, columns, 'likes') || 0;
-      const comments = analyticsNumber(row, columns, 'comments') || 0;
-      const shares = analyticsNumber(row, columns, 'shares') || 0;
-      result.set(videoId, {
-        views,
-        interactions: likes + comments + shares,
-        impressions: null,
-      });
-    }
+async function buildYouTubeDataDebug(configId, config, { maxVideos = 50 } = {}) {
+  const contentConfig = configForDateScope(config, 'content');
+  const { start, end } = getSyncWindow(contentConfig);
+  const sinceIso = start.toISOString();
+  const untilIso = end.toISOString();
+  const videoLimit = Math.max(1, Math.min(200, Number(maxVideos || 50)));
+  const channelsSnap = await db().collection('youtube_channels').get();
+  const selectedChannelIds = new Set(contentConfig.selectedAccounts?.youtube || []);
+  const channels = [];
+  const errors = [];
+  const rawResponses = [];
 
+  for (const channelDoc of channelsSnap.docs) {
+    const channel = { id: channelDoc.id, ...channelDoc.data() };
+    if (selectedChannelIds.size && !selectedChannelIds.has(String(channel.id))) continue;
     try {
-      const reachData = await youtubeAnalyticsQuery(accessToken, {
-        ...baseParams,
-        metrics: 'videoThumbnailImpressions',
-      });
-      const reachColumns = analyticsColumnMap(reachData);
-      for (const row of reachData?.rows || []) {
-        const videoId = row[reachColumns.video];
-        if (!videoId) continue;
-        const previous = result.get(videoId) || {};
-        result.set(videoId, {
-          ...previous,
-          impressions: analyticsNumber(row, reachColumns, 'videoThumbnailImpressions'),
+      const actualChannelId = await resolveYouTubeChannel(configId, channel.id);
+      const oauthAccountId = channel.oauthAccountId || `youtube_${sanitizeDocId(actualChannelId)}`;
+      const accessToken = await getYouTubeAccessToken(configId, oauthAccountId);
+      const channelProfile = await getYouTubeChannelProfile(accessToken, actualChannelId);
+      const allVideoIds = await listYouTubeUploadVideoIds(
+        accessToken,
+        channelProfile.uploadsPlaylistId,
+        sinceIso,
+        untilIso,
+      );
+      const videoIds = allVideoIds.slice(0, videoLimit);
+      const dataApiRequests = [];
+
+      for (let index = 0; index < videoIds.length; index += 50) {
+        const ids = videoIds.slice(index, index + 50);
+        const params = {
+          part: 'snippet,statistics,contentDetails,liveStreamingDetails',
+          id: ids.join(','),
+        };
+        const apiResult = await youtubeDataApiDebugQuery(accessToken, 'videos', params);
+        dataApiRequests.push({
+          purpose: 'Sheet Sync current YouTube video metadata and totals',
+          videoIds: ids,
+          ...apiResult,
+        });
+        rawResponses.push({
+          accountId: channel.id,
+          accountName: channel.name || channel.id,
+          channelId: channelProfile.channelId,
+          videoIds: ids,
+          status: apiResult.status,
+          ok: apiResult.ok,
+          body: apiResult.rawText,
         });
       }
-    } catch (_) {
-      // Reach/impression data is not available for every YouTube account/API surface.
+
+      channels.push({
+        accountId: channel.id,
+        accountName: channel.name || channel.id,
+        oauthAccountId,
+        channelId: channelProfile.channelId,
+        uploadsPlaylistId: channelProfile.uploadsPlaylistId,
+        totalVideosInDateRange: allVideoIds.length,
+        requestedVideos: videoIds.length,
+        skippedVideos: Math.max(0, allVideoIds.length - videoIds.length),
+        dataApiRequests,
+      });
+    } catch (error) {
+      errors.push({ platform: 'youtube', accountId: channel.id, message: error.message });
     }
   }
-  return result;
+
+  return {
+    ok: true,
+    success: !errors.length,
+    configId,
+    generatedAt: new Date().toISOString(),
+    startDate: contentConfig.startDate,
+    endDate: contentConfig.endDate,
+    maxVideos: videoLimit,
+    note: 'This shows the YouTube Data API v3 videos.list response used for content rows. Video View comes from statistics.viewCount. Interactions come from statistics.likeCount + statistics.commentCount. Reach, Impressions, and CTR come from the YouTube Reporting API cache.',
+    rawResponses,
+    channels,
+    errors,
+  };
 }
 
 async function discoverYouTubeRows(configId, config) {
   const rows = [];
   const errors = [];
+  const warnings = [];
   const { start, end } = getSyncWindow(config);
   const sinceIso = start.toISOString();
   const untilIso = end.toISOString();
@@ -2095,37 +2740,53 @@ async function discoverYouTubeRows(configId, config) {
       );
       if (!videoIds.length) continue;
 
-      const [metricResult, videoGroups] = await Promise.all([
-        queryYouTubeVideoMetrics(accessToken, channelProfile.channelId, videoIds, config)
-          .then((metricMap) => ({ metricMap, error: null }))
-          .catch((error) => ({ metricMap: new Map(), error })),
+      const [reachResult, typeResult, videoGroups] = await Promise.all([
+        queryYouTubeReachReportMetrics(accessToken, channelProfile.channelId, videoIds, config)
+          .catch((error) => ({
+            reachMap: new Map(),
+            warnings: [`YouTube Reporting reach lookup failed: ${error.message}. Reach, Impressions, and CTR are shown as "-".`],
+          })),
+        queryYouTubeCreatorContentTypes(accessToken, channelProfile.channelId, videoIds, config)
+          .catch((error) => ({
+            typeMap: new Map(),
+            warnings: [`YouTube Analytics creatorContentType lookup failed: ${error.message}. Type defaults to "Video" unless YouTube Data API marks the video as live.`],
+          })),
         Promise.all(Array.from({ length: Math.ceil(videoIds.length / 50) }, (_, groupIndex) => {
           const chunkIds = videoIds.slice(groupIndex * 50, groupIndex * 50 + 50);
           return youtubeDataApiWithToken(accessToken, 'videos', {
-            part: 'snippet,statistics,liveStreamingDetails,contentDetails',
+            part: 'snippet,statistics,contentDetails,liveStreamingDetails',
             id: chunkIds.join(','),
           });
         })),
       ]);
-      if (metricResult.error) {
-        errors.push({
+      for (const warning of reachResult.warnings || []) {
+        warnings.push({
           platform: 'youtube',
           accountId: channel.id,
-          message: `YouTube Analytics live metrics unavailable: ${metricResult.error.message}. Used YouTube Data API fallback; shares and Reach may be missing.`,
+          message: warning,
         });
       }
-      const metricMap = metricResult.metricMap;
+      for (const warning of typeResult.warnings || []) {
+        warnings.push({
+          platform: 'youtube',
+          accountId: channel.id,
+          message: warning,
+        });
+      }
+      const reachMap = reachResult.reachMap || new Map();
+      const typeMap = typeResult.typeMap || new Map();
 
       for (const group of videoGroups) {
         for (const video of group?.items || []) {
           const stats = video.statistics || {};
-          const analyticsMetrics = metricMap.get(video.id) || {};
-          const impressions = nullableNumber(analyticsMetrics.impressions);
-          const views = analyticsMetrics.views ?? nullableNumber(stats.viewCount);
-          const interactions = analyticsMetrics.interactions
-            ?? (toNumber(stats.likeCount) + toNumber(stats.commentCount));
+          const reachMetrics = reachMap.get(video.id) || {};
+          const impressions = nullableNumber(reachMetrics.impressions);
+          const viewsPerImpression = nullableNumber(reachMetrics.viewsPerImpression);
+          const views = nullableNumber(stats.viewCount);
+          const interactions = toNumber(stats.likeCount) + toNumber(stats.commentCount);
           const createdAt = video?.snippet?.publishedAt || new Date().toISOString();
-          const { type, link } = classifyYouTubeVideo(video);
+          const creatorContentType = typeMap.get(video.id)?.creatorContentType;
+          const { type, link } = youtubeCreatorContentTypeFields(video, creatorContentType);
 
           rows.push({
             key: `youtube:${video.id}`,
@@ -2140,11 +2801,12 @@ async function discoverYouTubeRows(configId, config) {
               type,
               link,
               numberOrDash(impressions),
-              numberOrDash(views),
+              numberOrDash(impressions),
               numberOrDash(interactions),
               numberOrDash(views),
+              numberOrDash(viewsPerImpression),
             ],
-            metrics: { views, interactions, impressions },
+            metrics: { views, interactions, impressions, viewsPerImpression, creatorContentType },
           });
         }
       }
@@ -2153,7 +2815,7 @@ async function discoverYouTubeRows(configId, config) {
     }
   }
 
-  return { rows, errors };
+  return { rows, errors, warnings };
 }
 
 async function getTikTokClientConfig(configId) {
@@ -2281,7 +2943,8 @@ async function discoverTikTokRows(configId, config) {
         for (const video of videos) {
           const mergedVideo = { ...video, ...(metricMap.get(video.id) || {}) };
           const createdAt = isoFromSeconds(mergedVideo.create_time);
-          const createdAtMs = new Date(createdAt).getTime();
+          const createdAtMs = dateValueMillis(createdAt);
+          if (createdAtMs === null) continue;
           if (createdAtMs > untilMs) continue;
           if (createdAtMs < sinceMs) {
             keepGoing = false;
@@ -2307,6 +2970,7 @@ async function discoverTikTokRows(configId, config) {
               numberOrDash(views),
               numberOrDash(interactions),
               numberOrDash(views),
+              '-',
             ],
             metrics: { views, interactions },
           });
@@ -2846,17 +3510,19 @@ async function discoverRows(configId, config) {
   const settled = await Promise.allSettled(tasks);
   const rows = [];
   const errors = [];
+  const warnings = [];
   const instagramDebug = [];
   for (const item of settled) {
     if (item.status === 'fulfilled') {
       rows.push(...item.value.rows);
       errors.push(...item.value.errors);
+      if (Array.isArray(item.value.warnings)) warnings.push(...item.value.warnings);
       if (Array.isArray(item.value.debug)) instagramDebug.push(...item.value.debug);
     } else {
       errors.push({ platform: 'system', message: item.reason?.message || String(item.reason) });
     }
   }
-  return { rows, errors, instagramDebug };
+  return { rows, errors, warnings, instagramDebug };
 }
 
 async function applyRowsToSheet(configId, config, normalizedRows, preview = false) {
@@ -2933,7 +3599,7 @@ async function runSync({
     if (!preview && shouldRunContent) await ensureSheetHeaders(configId, contentConfig);
     const discovered = shouldRunContent
       ? await discoverRows(configId, contentConfig)
-      : { rows: [], errors: [], instagramDebug: [] };
+      : { rows: [], errors: [], warnings: [], instagramDebug: [] };
     const writeResult = shouldRunContent
       ? await applyRowsToSheet(configId, contentConfig, discovered.rows, preview)
       : { appended: 0, updated: 0, previewRows: [] };
@@ -2943,6 +3609,10 @@ async function runSync({
     const allErrors = [
       ...discovered.errors,
       ...followerResult.errors,
+    ];
+    const allWarnings = [
+      ...(discovered.warnings || []),
+      ...(followerResult.warnings || []),
     ];
     const status = allErrors.length ? 'partial_success' : 'success';
 
@@ -2957,6 +3627,7 @@ async function runSync({
       followerRowsUpdated: followerResult.updated,
       followerAccounts: followerResult.accounts,
       errors: allErrors,
+      warnings: allWarnings,
       previewRows: preview ? contentPreviewRowsForFirestore(writeResult.previewRows) : [],
       followerPreviewRows: preview ? followerPreviewRowsForFirestore(followerResult.previewRows) : [],
     }, { merge: true });
@@ -2981,6 +3652,7 @@ async function runSync({
       followerRowsUpdated: followerResult.updated,
       followerAccounts: followerResult.accounts,
       errors: allErrors,
+      warnings: allWarnings,
       previewRows: preview ? writeResult.previewRows.slice(0, 50) : undefined,
       followerPreviewRows: preview ? followerResult.previewRows.slice(0, 50) : undefined,
       instagramDebug: discovered.instagramDebug || [],
@@ -3088,6 +3760,33 @@ export const runSheetSync = onRequest({ cors: true, timeoutSeconds: 540, maxInst
       source: req.body?.preview ? 'preview' : 'manual',
       configOverride,
       target: req.body?.target,
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    jsonError(res, 500, error.message);
+  }
+});
+
+export const debugYouTubeDataApi = onRequest({ cors: true, timeoutSeconds: 180, maxInstances: 3 }, async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return jsonError(res, 405, 'Method not allowed. Use POST.');
+
+  try {
+    await requireFirebaseUser(req);
+    const configId = req.body?.configId || DEFAULT_CONFIG_ID;
+    let config;
+    if (req.body?.config) {
+      config = normalizeConfig(req.body.config);
+      assertValidConfig(config);
+    } else {
+      const configSnap = await db().collection('sync_configs').doc(configId).get();
+      if (!configSnap.exists) throw new Error('Sync config has not been saved yet');
+      config = normalizeConfig(configSnap.data());
+      assertValidConfig(config);
+    }
+    const result = await buildYouTubeDataDebug(configId, config, {
+      maxVideos: req.body?.maxVideos,
     });
     res.status(200).json(result);
   } catch (error) {
@@ -3409,6 +4108,141 @@ export const oauthCallbackTikTok = onRequest({ cors: true, maxInstances: 10 }, a
   } catch (callbackError) {
     res.status(400).send(`<html><body><h2>TikTok connection failed</h2><p>${callbackError.message}</p></body></html>`);
   }
+});
+
+async function refreshYouTubeReachCachesForConfig({
+  configId = DEFAULT_CONFIG_ID,
+  forceRefresh = true,
+  source = 'schedule',
+} = {}) {
+  const configSnap = await db().collection('sync_configs').doc(configId).get();
+  if (!configSnap.exists) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'Sync config has not been saved yet',
+      channels: 0,
+      videos: 0,
+      updatedRows: 0,
+      warnings: [],
+      errors: [],
+    };
+  }
+
+  const config = normalizeConfig(configSnap.data());
+  if (config.enabledPlatforms?.youtube === false) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'YouTube sync is disabled',
+      channels: 0,
+      videos: 0,
+      updatedRows: 0,
+      warnings: [],
+      errors: [],
+    };
+  }
+
+  const contentConfig = configForDateScope(config, 'content');
+  const { start, end } = getSyncWindow(contentConfig);
+  const sinceIso = start.toISOString();
+  const untilIso = end.toISOString();
+  const channelsSnap = await db().collection('youtube_channels').get();
+  const selectedChannelIds = new Set(contentConfig.selectedAccounts?.youtube || []);
+  const warnings = [];
+  const errors = [];
+  const refreshedChannels = [];
+  let channelCount = 0;
+  let videoCount = 0;
+  let updatedRows = 0;
+
+  for (const channelDoc of channelsSnap.docs) {
+    const channel = { id: channelDoc.id, ...channelDoc.data() };
+    if (selectedChannelIds.size && !selectedChannelIds.has(String(channel.id))) continue;
+    try {
+      const actualChannelId = await resolveYouTubeChannel(configId, channel.id);
+      const oauthAccountId = channel.oauthAccountId || `youtube_${sanitizeDocId(actualChannelId)}`;
+      const accessToken = await getYouTubeAccessToken(configId, oauthAccountId);
+      const channelProfile = await getYouTubeChannelProfile(accessToken, actualChannelId);
+      const videoIds = await listYouTubeUploadVideoIds(
+        accessToken,
+        channelProfile.uploadsPlaylistId,
+        sinceIso,
+        untilIso,
+      );
+      channelCount += 1;
+      videoCount += videoIds.length;
+      if (!videoIds.length) {
+        refreshedChannels.push({
+          channelId: channelProfile.channelId,
+          accountId: channel.id,
+          videos: 0,
+          updatedRows: 0,
+        });
+        continue;
+      }
+
+      const result = await refreshYouTubeReachCache(accessToken, channelProfile.channelId, videoIds, {
+        ...contentConfig,
+        scope: 'lifetime',
+      }, {
+        force: forceRefresh,
+      });
+      updatedRows += Number(result.updatedRows || 0);
+      for (const warning of result.warnings || []) {
+        warnings.push({
+          platform: 'youtube',
+          accountId: channel.id,
+          message: warning,
+        });
+      }
+      refreshedChannels.push({
+        channelId: channelProfile.channelId,
+        accountId: channel.id,
+        videos: videoIds.length,
+        updatedRows: Number(result.updatedRows || 0),
+        reportCount: Number(result.reportCount || 0),
+        skipped: Boolean(result.skipped),
+      });
+    } catch (error) {
+      errors.push({ platform: 'youtube', accountId: channel.id, message: error.message });
+    }
+  }
+
+  const summary = {
+    ok: !errors.length,
+    skipped: false,
+    source,
+    configId,
+    startDate: contentConfig.startDate,
+    endDate: contentConfig.endDate,
+    channels: channelCount,
+    videos: videoCount,
+    updatedRows,
+    warnings,
+    errors,
+    refreshedChannels,
+  };
+
+  await db().collection('youtube_reach_cache_runs').add({
+    ...summary,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return summary;
+}
+
+export const scheduledYouTubeReachCacheRefresh = onSchedule({
+  schedule: 'every 2 hours',
+  timeZone: 'UTC',
+  timeoutSeconds: 540,
+  maxInstances: 1,
+}, async () => {
+  await refreshYouTubeReachCachesForConfig({
+    configId: DEFAULT_CONFIG_ID,
+    forceRefresh: true,
+    source: 'schedule',
+  });
 });
 
 export const scheduledSheetSync = onSchedule({

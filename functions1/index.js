@@ -8,12 +8,14 @@ export {
   testSheetConnection,
   getSyncSecretStatus,
   runSheetSync,
+  debugYouTubeDataApi,
   startInstagramOAuth,
   oauthCallbackInstagram,
   startYouTubeOAuth,
   oauthCallbackYouTube,
   startTikTokOAuth,
   oauthCallbackTikTok,
+  scheduledYouTubeReachCacheRefresh,
   scheduledSheetSync,
 } from './sheetSync.js';
 

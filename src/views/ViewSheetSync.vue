@@ -321,6 +321,47 @@
       <pre>{{ instagramDebugText }}</pre>
     </section>
 
+    <section v-if="showSettings" class="sync-panel debug-panel">
+      <div class="panel-title">
+        <h2>YouTube Data API Raw Response</h2>
+        <span>{{ youtubeAnalyticsDebugStatus }}</span>
+      </div>
+      <div class="debug-actions">
+        <label class="debug-limit-field">
+          Max videos
+          <input v-model.number="youtubeAnalyticsDebugLimit" type="number" min="1" max="200" />
+        </label>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="youtubeAnalyticsDebugLoading || busy || !form.sheetId"
+          @click="loadYouTubeAnalyticsDebug"
+        >
+          {{ youtubeAnalyticsDebugLoading ? 'Loading...' : 'Show Raw Data API Response' }}
+        </button>
+        <button
+          v-if="youtubeRawResponseItems.length || youtubeAnalyticsDebugError"
+          type="button"
+          class="ghost"
+          :disabled="youtubeAnalyticsDebugLoading"
+          @click="clearYouTubeAnalyticsDebug"
+        >
+          Clear
+        </button>
+      </div>
+      <p v-if="youtubeAnalyticsDebugError" class="message error">{{ youtubeAnalyticsDebugError }}</p>
+      <div v-if="youtubeRawResponseItems.length" class="raw-response-list">
+        <article v-for="(item, index) in youtubeRawResponseItems" :key="`${item.channelId || 'youtube'}-${index}`">
+          <div class="raw-response-meta">
+            <strong>Response {{ index + 1 }}</strong>
+            <span>HTTP {{ item.status || 'unknown' }}</span>
+            <span>{{ item.accountName || item.channelId || 'YouTube' }}</span>
+          </div>
+          <pre>{{ item.body }}</pre>
+        </article>
+      </div>
+    </section>
+
     <section v-if="previewRows.length" class="sync-panel">
       <div class="panel-title">
         <h2>Preview Rows</h2>
@@ -336,9 +377,10 @@
               <th>Platform</th>
               <th>Type</th>
               <th>Reach</th>
-              <th>Views / Impression</th>
+              <th>Impressions</th>
               <th>Interactions</th>
               <th>Video View</th>
+              <th>CTR</th>
             </tr>
           </thead>
           <tbody>
@@ -352,6 +394,7 @@
               <td>{{ item.row[6] }}</td>
               <td>{{ item.row[7] }}</td>
               <td>{{ item.row[8] }}</td>
+              <td>{{ formatPreviewCtr(item.row[9]) }}</td>
             </tr>
           </tbody>
         </table>
@@ -405,6 +448,9 @@
           </div>
           <p v-if="run.errors && run.errors.length" class="run-errors">
             {{ run.errors.map((err) => err.message).join(' | ') }}
+          </p>
+          <p v-if="run.warnings && run.warnings.length" class="run-warnings">
+            {{ run.warnings.map((warning) => warning.message || warning).join(' | ') }}
           </p>
         </article>
       </div>
@@ -593,6 +639,7 @@ const FUNCTION_ENDPOINTS = {
   secretStatus: `${CLOUD_FUNCTION_BASE_URL}/getSyncSecretStatus`,
   testSheet: `${CLOUD_FUNCTION_BASE_URL}/testSheetConnection`,
   runSync: `${CLOUD_FUNCTION_BASE_URL}/runSheetSync`,
+  youtubeDataDebug: `${CLOUD_FUNCTION_BASE_URL}/debugYouTubeDataApi`,
   startInstagram: `${CLOUD_FUNCTION_BASE_URL}/startInstagramOAuth`,
   startYouTube: `${CLOUD_FUNCTION_BASE_URL}/startYouTubeOAuth`,
   startTikTok: `${CLOUD_FUNCTION_BASE_URL}/startTikTokOAuth`
@@ -630,6 +677,10 @@ const secretStatusUpdatedAt = ref(null)
 const previewRows = ref([])
 const followerPreviewRows = ref([])
 const instagramDebugRows = ref([])
+const youtubeAnalyticsDebug = ref(null)
+const youtubeAnalyticsDebugError = ref('')
+const youtubeAnalyticsDebugLimit = ref(50)
+const youtubeAnalyticsDebugLoading = ref(false)
 const runs = ref([])
 const facebookPages = ref([])
 const instagramAccounts = ref([])
@@ -714,6 +765,18 @@ const allInstagramSelected = computed(() => allSelected('instagram'))
 const allYouTubeSelected = computed(() => allSelected('youtube'))
 const allTikTokSelected = computed(() => allSelected('tiktok'))
 const instagramDebugText = computed(() => JSON.stringify(instagramDebugRows.value, null, 2))
+const youtubeRawResponseItems = computed(() => (
+  Array.isArray(youtubeAnalyticsDebug.value?.rawResponses)
+    ? youtubeAnalyticsDebug.value.rawResponses
+    : []
+))
+const youtubeAnalyticsDebugStatus = computed(() => {
+  if (youtubeAnalyticsDebugLoading.value) return 'Loading'
+  const responses = youtubeRawResponseItems.value.length
+  if (youtubeAnalyticsDebug.value) return `${responses} raw response${responses === 1 ? '' : 's'}`
+  if (youtubeAnalyticsDebugError.value) return 'Error'
+  return 'Not loaded'
+})
 const secretStatusItems = computed(() => {
   const statusByName = Object.fromEntries(
     secretStatusFields.value.map((item) => [item.name, item])
@@ -942,6 +1005,23 @@ function syncErrorText(errors = []) {
     .join(' | ')
 }
 
+function syncWarningText(warnings = []) {
+  if (!Array.isArray(warnings) || !warnings.length) return ''
+  return warnings
+    .slice(0, 3)
+    .map((warning) => `${warning.platform || 'sync'}: ${warning.message || warning}`)
+    .join(' | ')
+}
+
+function syncNoticeSuffix(result = {}) {
+  const errors = syncErrorText(result.errors)
+  const warnings = syncWarningText(result.warnings)
+  return [
+    errors ? `Errors: ${errors}` : '',
+    warnings ? `Warnings: ${warnings}` : ''
+  ].filter(Boolean).join(' ')
+}
+
 function cleanSecretsPayload() {
   return Object.fromEntries(
     Object.entries(secrets).filter(([, value]) => String(value || '').trim())
@@ -973,6 +1053,43 @@ async function postJson(url, body = {}) {
     throw new Error(data.error || data.message || `Request failed: ${response.status}`)
   }
   return data
+}
+
+function normalizedYouTubeDebugLimit() {
+  const value = Number(youtubeAnalyticsDebugLimit.value || 50)
+  if (!Number.isFinite(value)) return 50
+  return Math.max(1, Math.min(200, Math.floor(value)))
+}
+
+function clearYouTubeAnalyticsDebug() {
+  youtubeAnalyticsDebug.value = null
+  youtubeAnalyticsDebugError.value = ''
+}
+
+async function loadYouTubeAnalyticsDebug() {
+  youtubeAnalyticsDebugLoading.value = true
+  youtubeAnalyticsDebugError.value = ''
+  youtubeAnalyticsDebug.value = null
+  youtubeAnalyticsDebugLimit.value = normalizedYouTubeDebugLimit()
+  try {
+    const result = await postJson(FUNCTION_ENDPOINTS.youtubeDataDebug, {
+      configId: CONFIG_ID,
+      config: configPayload(),
+      maxVideos: youtubeAnalyticsDebugLimit.value
+    })
+    youtubeAnalyticsDebug.value = result
+    const errors = syncErrorText(result.errors)
+    const responses = Array.isArray(result.rawResponses) ? result.rawResponses.length : 0
+    setMessage(
+      `Raw YouTube Data API response loaded: ${responses} response(s), ${youtubeAnalyticsDebugLimit.value} max video(s).${errors ? ` Errors: ${errors}` : ''}`,
+      errors ? 'error' : 'info'
+    )
+  } catch (error) {
+    youtubeAnalyticsDebugError.value = error.message
+    setMessage(error.message, 'error')
+  } finally {
+    youtubeAnalyticsDebugLoading.value = false
+  }
 }
 
 async function loadSecretStatus({ reveal = false } = {}) {
@@ -1202,8 +1319,9 @@ async function previewSync(target = 'both') {
     previewRows.value = result.previewRows || []
     followerPreviewRows.value = result.followerPreviewRows || []
     instagramDebugRows.value = result.instagramDebug || []
+    const notices = syncNoticeSuffix(result)
     const errors = syncErrorText(result.errors)
-    setMessage(`Preview ${runTargetLabel(normalizedTarget)} complete: ${previewMessage(result, normalizedTarget)}.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
+    setMessage(`Preview ${runTargetLabel(normalizedTarget)} complete: ${previewMessage(result, normalizedTarget)}.${notices ? ` ${notices}` : ''}`, errors ? 'error' : 'info')
     await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
@@ -1226,8 +1344,9 @@ async function runSync(target = 'both') {
       config: configPayload()
     })
     instagramDebugRows.value = result.instagramDebug || []
+    const notices = syncNoticeSuffix(result)
     const errors = syncErrorText(result.errors)
-    setMessage(`Sync ${runTargetLabel(normalizedTarget)} complete: ${runMessage(result, normalizedTarget)}.${errors ? ` Errors: ${errors}` : ''}`, errors ? 'error' : 'info')
+    setMessage(`Sync ${runTargetLabel(normalizedTarget)} complete: ${runMessage(result, normalizedTarget)}.${notices ? ` ${notices}` : ''}`, errors ? 'error' : 'info')
     previewRows.value = []
     followerPreviewRows.value = []
     await Promise.all([loadRuns(), loadAccounts()])
@@ -1285,6 +1404,14 @@ function formatTimestamp(value) {
   const date = value?.toDate ? value.toDate() : value ? new Date(value) : null
   if (!date || Number.isNaN(date.getTime())) return 'Not recorded'
   return date.toLocaleString()
+}
+
+function formatPreviewCtr(value) {
+  if (value === '-' || value === '' || value == null) return '-'
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return value
+  const percent = Math.abs(numeric) <= 1 ? numeric * 100 : numeric
+  return `${Number(percent.toFixed(2))}%`
 }
 
 onMounted(async () => {
@@ -1849,6 +1976,42 @@ th {
 .run-errors {
   color: #fecaca;
   font-size: 0.86rem;
+}
+
+.run-warnings {
+  color: #fde68a;
+  font-size: 0.86rem;
+}
+
+.debug-actions {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.debug-limit-field {
+  max-width: 150px;
+}
+
+.raw-response-list {
+  display: grid;
+  gap: 14px;
+}
+
+.raw-response-meta {
+  align-items: center;
+  color: #9fb1c7;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.raw-response-meta strong {
+  color: #f8fafc;
 }
 
 .debug-panel pre {
