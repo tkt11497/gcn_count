@@ -5,68 +5,145 @@
         <p class="eyebrow">Social metrics automation</p>
         <h1>Google Sheet Sync</h1>
         <p class="subtitle">
-          Auto-discover recent Facebook, Instagram, TikTok, and YouTube content, then append or update the reporting sheet.
+          Sync content performance and follower growth into one reporting workbook.
         </p>
       </div>
       <div class="status-panel">
         <span class="status-label">Last run</span>
         <strong>{{ latestRunLabel }}</strong>
         <small>{{ latestRunDetails }}</small>
-        <button type="button" class="mode-toggle" @click="showSettings = !showSettings">
-          {{ showSettings ? 'Hide Settings' : 'Show Settings' }}
-        </button>
+        <div class="mode-switch" role="tablist" aria-label="Sheet sync mode">
+          <button
+            type="button"
+            class="mode-choice"
+            :class="{ active: !showSettings }"
+            @click="showSettings = false"
+          >
+            Basic
+          </button>
+          <button
+            type="button"
+            class="mode-choice"
+            :class="{ active: showSettings }"
+            @click="showSettings = true"
+          >
+            Advanced
+          </button>
+        </div>
       </div>
     </section>
 
-    <form v-if="!showSettings" class="sync-panel quick-sheet-panel" @submit.prevent="saveConfig">
-      <div class="panel-title">
-        <div>
-          <h2>Add Google Sheet</h2>
-          <small>Paste the Sheet ID, keep the default tabs, then save or test the connection.</small>
-        </div>
-        <span>Simple mode</span>
-      </div>
-
-      <div class="quick-sheet-grid">
-        <label class="sheet-id-field">
-          Google Sheet ID
-          <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
-        </label>
-        <label>
-          Content tab
-          <input v-model.trim="form.sheetTab" type="text" placeholder="Sheet1" />
-        </label>
-        <label>
-          Follower tab
-          <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" />
-        </label>
-      </div>
-
-      <div class="actions quick-actions">
-        <button type="submit" :disabled="busy">Save Sheet</button>
-        <button type="button" class="secondary" :disabled="busy" @click="testSheet">Test Sheet</button>
-        <button type="button" class="ghost" :disabled="busy" @click="openSecretsModal">Set Backend Secrets</button>
-        <button type="button" class="ghost" @click="showSettings = true">Advanced Settings</button>
-      </div>
-
-      <p class="hint">
-        Advanced settings include schedules, date windows, platform filters, account selection, and backend secret status.
-      </p>
-    </form>
-
-    <section v-if="showSettings" class="sync-grid">
-      <form class="sync-panel" @submit.prevent="saveConfig">
+    <section v-if="!showSettings" class="basic-grid">
+      <form class="sync-panel basic-panel" @submit.prevent="saveConfig">
         <div class="panel-title">
-          <h2>Sheet Setup</h2>
-          <button type="button" class="mini-btn" @click="showSettings = false">Simple mode</button>
+          <div>
+            <h2>Basic Setup</h2>
+            <small>{{ form.sheetId ? 'Sheet connected to this configuration' : 'Add a Google Sheet before running sync' }}</small>
+          </div>
+          <span>{{ contentWindowLabel }}</span>
         </div>
 
-        <label>
-          Google Sheet ID
-          <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
-        </label>
+        <div class="basic-workspace-grid">
+          <div class="sheet-fields">
+            <label class="sheet-id-field">
+              Google Sheet ID
+              <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
+            </label>
+            <div class="two-col compact-fields">
+              <label>
+                Content tab
+                <input v-model.trim="form.sheetTab" type="text" placeholder="Sheet1" />
+              </label>
+              <label>
+                Follower tab
+                <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" />
+              </label>
+            </div>
+          </div>
 
-        <div class="two-col">
+          <div class="date-card-stack">
+            <div class="date-group">
+              <div class="date-group-title">
+                <span>Content tab date duration</span>
+                <strong>{{ contentWindowLabel }}</strong>
+              </div>
+              <div class="two-col">
+                <label>
+                  Start date
+                  <input v-model="form.contentStartDate" type="date" />
+                </label>
+                <label>
+                  End date
+                  <input v-model="form.contentEndDate" type="date" />
+                </label>
+              </div>
+            </div>
+
+            <div class="date-group">
+              <div class="date-group-title">
+                <span>Follower tab date duration</span>
+                <strong>{{ followerWindowLabel }}</strong>
+              </div>
+              <div class="follower-range-list">
+                <div
+                  v-for="(range, index) in form.followerDateRanges"
+                  :key="range.id || index"
+                  class="follower-range-row"
+                >
+                  <div class="follower-range-heading">
+                    <span>Duration {{ index + 1 }}</span>
+                    <button
+                      v-if="form.followerDateRanges.length > 1"
+                      type="button"
+                      class="mini-btn danger"
+                      @click="removeFollowerDateRange(index)"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div class="two-col">
+                    <label>
+                      Start date
+                      <input v-model="range.startDate" type="date" />
+                    </label>
+                    <label>
+                      End date
+                      <input v-model="range.endDate" type="date" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <button type="button" class="mini-btn add-range-btn" @click="addFollowerDateRange">
+                Add duration
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions quick-actions">
+          <button type="submit" :disabled="busy">Save Basic Setup</button>
+          <button type="button" class="secondary" :disabled="busy || !form.sheetId" @click="testSheet">Test Sheet</button>
+          <button type="button" class="ghost" :disabled="busy" @click="openSecretsModal">Set Backend Secrets</button>
+          <button type="button" class="ghost" @click="showSettings = true">Advanced</button>
+        </div>
+      </form>
+    </section>
+
+    <section v-else class="advanced-grid">
+      <form class="sync-panel advanced-panel" @submit.prevent="saveConfig">
+        <div class="panel-title">
+          <div>
+            <h2>Advanced</h2>
+            <small>Automation, platform filters, and account connections</small>
+          </div>
+          <button type="button" class="mini-btn" @click="showSettings = false">Basic</button>
+        </div>
+
+        <div class="advanced-sheet-grid">
+          <label class="sheet-id-field">
+            Google Sheet ID
+            <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
+          </label>
           <label>
             Content tab
             <input v-model.trim="form.sheetTab" type="text" placeholder="Sheet1" />
@@ -77,7 +154,7 @@
           </label>
         </div>
 
-        <div class="two-col">
+        <div class="advanced-schedule-grid">
           <label>
             Timezone
             <input v-model.trim="form.timezone" type="text" placeholder="Asia/Rangoon" />
@@ -85,6 +162,10 @@
           <label>
             Schedule time
             <input v-model="form.scheduleTime" type="time" />
+          </label>
+          <label class="switch-row schedule-toggle">
+            <input v-model="form.scheduleEnabled" type="checkbox" />
+            <span>Enable scheduled sync</span>
           </label>
         </div>
 
@@ -146,18 +227,7 @@
           </div>
         </div>
 
-        <div class="two-col">
-          <div class="date-summary">
-            <span>Saved windows</span>
-            <strong>Content and follower tabs run independently</strong>
-          </div>
-          <label class="switch-row">
-            <input v-model="form.scheduleEnabled" type="checkbox" />
-            <span>Enable scheduled sync</span>
-          </label>
-        </div>
-
-        <div class="two-col">
+        <div class="platform-grid">
           <label class="switch-row">
             <input v-model="form.enabledPlatforms.facebook" type="checkbox" />
             <span>Facebook</span>
@@ -166,9 +236,6 @@
             <input v-model="form.enabledPlatforms.instagram" type="checkbox" />
             <span>Instagram</span>
           </label>
-        </div>
-
-        <div class="two-col">
           <label class="switch-row">
             <input v-model="form.enabledPlatforms.youtube" type="checkbox" />
             <span>YouTube</span>
@@ -184,18 +251,40 @@
           <button type="button" class="secondary" :disabled="busy" @click="testSheet">Test Sheet</button>
         </div>
       </form>
+
+      <section class="sync-panel connections-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Connections</h2>
+            <small>{{ accountPanelSummary }}</small>
+          </div>
+          <span>{{ secretStatusSummary }}</span>
+        </div>
+        <div class="actions oauth-actions inline-actions">
+          <button class="secondary" :disabled="busy" @click="connectInstagram">Connect Instagram</button>
+          <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
+          <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
+          <button class="ghost" :disabled="busy" @click="openSecretsModal">Backend Secrets</button>
+        </div>
+      </section>
     </section>
 
-    <section v-if="showSettings" class="sync-panel accounts-panel">
+    <section class="sync-panel accounts-panel">
       <div class="panel-title">
-        <h2>Accounts for This Sheet</h2>
-        <span>{{ accountSummary }}</span>
+        <div>
+          <h2>Available Accounts</h2>
+          <small>{{ accountSummary }}</small>
+        </div>
+        <span>{{ connectedAccountCount }} connected</span>
       </div>
 
       <div class="accounts-grid">
         <div class="account-column">
           <div class="account-heading">
-            <strong>Facebook Pages</strong>
+            <div>
+              <strong>Facebook</strong>
+              <small>{{ facebookPages.length }} page{{ facebookPages.length === 1 ? '' : 's' }}</small>
+            </div>
             <button type="button" class="mini-btn" @click="toggleAllAccounts('facebook')">
               {{ allFacebookSelected ? 'Clear' : 'All' }}
             </button>
@@ -212,7 +301,10 @@
 
         <div class="account-column">
           <div class="account-heading">
-            <strong>Instagram Accounts</strong>
+            <div>
+              <strong>Instagram</strong>
+              <small>{{ instagramAccounts.length }} account{{ instagramAccounts.length === 1 ? '' : 's' }}</small>
+            </div>
             <button type="button" class="mini-btn" @click="toggleAllAccounts('instagram')">
               {{ allInstagramSelected ? 'Clear' : 'All' }}
             </button>
@@ -229,7 +321,10 @@
 
         <div class="account-column">
           <div class="account-heading">
-            <strong>YouTube Channels</strong>
+            <div>
+              <strong>YouTube</strong>
+              <small>{{ youtubeChannels.length }} channel{{ youtubeChannels.length === 1 ? '' : 's' }}</small>
+            </div>
             <button type="button" class="mini-btn" @click="toggleAllAccounts('youtube')">
               {{ allYouTubeSelected ? 'Clear' : 'All' }}
             </button>
@@ -246,7 +341,10 @@
 
         <div class="account-column">
           <div class="account-heading">
-            <strong>TikTok Accounts</strong>
+            <div>
+              <strong>TikTok</strong>
+              <small>{{ tiktokAccounts.length }} account{{ tiktokAccounts.length === 1 ? '' : 's' }}</small>
+            </div>
             <button type="button" class="mini-btn" @click="toggleAllAccounts('tiktok')">
               {{ allTikTokSelected ? 'Clear' : 'All' }}
             </button>
@@ -262,7 +360,7 @@
         </div>
       </div>
 
-      <p class="hint">If no account is selected for a platform, that platform syncs all connected accounts. Select one or more to limit this sheet.</p>
+      <p class="hint">No selection means all connected accounts for that platform.</p>
     </section>
 
     <section class="sync-panel controls-panel">
@@ -273,9 +371,8 @@
       <div class="run-control-list">
         <div class="run-control-row">
           <div>
-            <strong>{{ showSettings ? 'Both tabs' : 'Sync sheet' }}</strong>
-            <small v-if="showSettings">Content: {{ contentWindowLabel }} | Followers: {{ followerWindowLabel }}</small>
-            <small v-else>{{ form.sheetId ? 'Preview or run the saved sheet configuration.' : 'Add a Google Sheet ID first.' }}</small>
+            <strong>{{ showSettings ? 'Both tabs' : 'Run sync' }}</strong>
+            <small>Content: {{ contentWindowLabel }} | Followers: {{ followerWindowLabel }}</small>
           </div>
           <div class="actions">
             <button :disabled="busy || !form.sheetId" @click="previewSync('both')">{{ showSettings ? 'Preview Both' : 'Preview' }}</button>
@@ -304,11 +401,6 @@
             <button :disabled="busy" @click="runSync('followers')">Run Followers</button>
           </div>
         </div>
-      </div>
-      <div v-if="showSettings" class="actions oauth-actions">
-        <button class="secondary" :disabled="busy" @click="connectInstagram">Connect Instagram</button>
-        <button class="secondary" :disabled="busy" @click="connectYouTube">Connect YouTube</button>
-        <button class="secondary" :disabled="busy" @click="connectTikTok">Connect TikTok</button>
       </div>
       <p v-if="message" class="message" :class="{ error: messageType === 'error' }">{{ message }}</p>
     </section>
@@ -806,6 +898,15 @@ const accountSummary = computed(() => {
     + form.selectedAccounts.tiktok.length
   return total ? `${total} selected` : 'All connected accounts'
 })
+const connectedAccountCount = computed(() => (
+  facebookPages.value.length
+  + instagramAccounts.value.length
+  + youtubeChannels.value.length
+  + tiktokAccounts.value.length
+))
+const accountPanelSummary = computed(() => (
+  `${connectedAccountCount.value} connected, ${accountSummary.value.toLowerCase()}`
+))
 const contentWindowLabel = computed(() => dateWindowLabel(form.contentStartDate, form.contentEndDate))
 const followerWindowLabel = computed(() => {
   const count = normalizedFollowerDateRanges().length
@@ -1497,13 +1598,32 @@ h2 {
   text-transform: capitalize;
 }
 
-.mode-toggle {
-  background: #38bdf8;
-  color: #06121b;
+.mode-switch {
+  background: #0f1727;
+  border: 1px solid #2b3a55;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
   margin-top: 14px;
+  padding: 4px;
   width: 100%;
 }
 
+.mode-choice {
+  background: transparent;
+  color: #cbd5e1;
+  min-height: 34px;
+  padding: 8px 10px;
+}
+
+.mode-choice.active {
+  background: #38bdf8;
+  color: #06121b;
+}
+
+.basic-grid,
+.advanced-grid,
 .sync-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1576,6 +1696,33 @@ textarea:focus {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr 1fr;
+}
+
+.schedule-toggle {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.basic-workspace-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.15fr);
+}
+
+.sheet-fields {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.compact-fields label,
+.sheet-fields label {
+  margin-bottom: 0;
+}
+
+.date-card-stack {
+  display: grid;
+  gap: 14px;
 }
 
 .quick-sheet-panel {
@@ -1664,27 +1811,42 @@ textarea:focus {
   align-items: center;
   display: flex;
   gap: 10px;
-  min-height: 66px;
+  margin-bottom: 0;
+  min-height: 42px;
 }
 
-.date-summary {
-  background: #0f1727;
-  border: 1px solid #34445f;
-  border-radius: 8px;
+.advanced-schedule-grid,
+.advanced-sheet-grid,
+.platform-grid {
   display: grid;
-  gap: 5px;
-  min-height: 66px;
-  padding: 11px 12px;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.date-summary span {
-  color: #99a8bc;
-  font-size: 0.82rem;
+.advanced-schedule-grid,
+.advanced-sheet-grid {
+  grid-template-columns: minmax(280px, 1.4fr) minmax(160px, 0.8fr) minmax(180px, 0.8fr);
 }
 
-.date-summary strong {
-  color: #dbe7f5;
-  font-size: 0.95rem;
+.advanced-sheet-grid {
+  margin-bottom: 14px;
+}
+
+.advanced-schedule-grid {
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.advanced-schedule-grid label,
+.advanced-sheet-grid label,
+.platform-grid label {
+  margin-bottom: 0;
+}
+
+.platform-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+  margin-top: 4px;
 }
 
 .switch-row input {
@@ -1820,6 +1982,11 @@ button:disabled {
   padding-top: 16px;
 }
 
+.inline-actions {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .accounts-panel {
   display: block;
 }
@@ -1843,6 +2010,17 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   margin-bottom: 12px;
+}
+
+.account-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.account-heading small {
+  color: #99a8bc;
+  font-size: 0.78rem;
 }
 
 .mini-btn {
@@ -2114,6 +2292,10 @@ th {
 
   .sync-header,
   .sync-grid,
+  .basic-workspace-grid,
+  .advanced-schedule-grid,
+  .advanced-sheet-grid,
+  .platform-grid,
   .accounts-grid,
   .run-control-row,
   .two-col,
