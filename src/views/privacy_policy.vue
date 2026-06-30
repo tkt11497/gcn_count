@@ -1,337 +1,303 @@
 <template>
-  <div class="privacy-container">
-    <div class="privacy-card">
-      <div class="header-section">
-        <div class="logo-section">
-          <div class="logo">📋</div>
-          <h1 class="main-title">Privacy Policy</h1>
+  <main class="legal-page">
+    <section class="legal-shell">
+      <header class="legal-hero">
+        <p class="eyebrow">Game Cast Network</p>
+        <h1>Privacy Policy</h1>
+        <p class="effective-date">Effective Date: June 30, 2026</p>
+        <p>
+          This Privacy Policy explains how Game Cast Network uses authorized social platform,
+          Google Sheets, live viewer count, and analytics data in the Live Dashboard, Live Viewer
+          Count, and Sheet Sync tools.
+        </p>
+        <div class="legal-actions">
+          <RouterLink to="/terms_of_service">Terms of Service</RouterLink>
+          <a href="#data-deletion">Data deletion instructions</a>
         </div>
-        <p class="subtitle">Effective Date: 8/28/2025</p>
-      </div>
+      </header>
 
-      <div class="content-section">
-        <div class="policy-intro">
-          <p>We respects your privacy and is committed to protecting it. This Privacy Policy explains how we collect, use, and share information when you use our application.</p>
-        </div>
+      <section class="legal-card">
+        <h2>1. What Our App Does</h2>
+        <p>
+          Our app helps authorized users view live viewer counts, live stream performance, and
+          post-performance metrics from Facebook, Instagram, YouTube, and TikTok, then sync selected
+          reporting data into a Google Sheet chosen by the user.
+        </p>
+        <p>
+          We also operate a live viewer count collection feature for authorized live events. That
+          feature periodically collects live viewer count snapshots from Facebook Live videos and
+          YouTube live broadcasts that you connect, select, or authorize for monitoring.
+        </p>
+        <p>
+          We only access accounts, pages, channels, profiles, media, videos, insights, and Sheets
+          that you connect or authorize through the relevant platform login or service account flow.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">1. Information We Collect</h2>
-          <p>When you use our app, we may collect the following information through the Facebook Graph API and other services:</p>
-          <ul class="policy-list">
-            <li>Basic Facebook profile information (such as name, profile picture, user ID)</li>
-            <li>Page information (such as page name, ID, and access tokens if you manage a Page)</li>
-            <li>Content-related data (such as posts, comments, live video statistics) if you grant permissions</li>
-          </ul>
-          <p>We do not collect sensitive personal data unless explicitly required for the app's functionality.</p>
-        </div>
+      <section class="legal-card">
+        <h2>2. Information We Collect</h2>
+        <p>Depending on the accounts and permissions you connect, we may collect or process:</p>
+        <ul>
+          <li>Account identifiers, display names, usernames, page names, channel names, profile links, and account connection status.</li>
+          <li>OAuth access tokens, refresh tokens, token expiry information, selected account IDs, and backend configuration needed to call authorized APIs.</li>
+          <li>Google Sheet configuration such as Sheet ID, tab names, date ranges, schedule time, timezone, selected platforms, and selected accounts.</li>
+          <li>Facebook Page, post, and live video data, including post IDs, live video IDs, message or caption text, media type, permalink, created time, live status, live viewer count snapshots, reach, impressions, video views, reactions, comments, and shares where available from the Meta Graph API.</li>
+          <li>Instagram Business or Creator media data, including media IDs, caption, media type, permalink, timestamp, like count, comment count, reach, views, total interactions, saved, shares, replies, and other insight metrics where available from the Instagram API.</li>
+          <li>YouTube channel, video, and live broadcast data, including channel ID, video ID, live broadcast ID where available, title, published date, scheduled or actual live time, URL, live viewer count snapshots, video statistics, and authorized YouTube Analytics metrics such as views, likes, comments, shares, thumbnail impressions, and thumbnail click-through rate where available.</li>
+          <li>TikTok account and video data, including open ID, display name, avatar URL, video ID, title, URL, create time, view count, like count, comment count, share count, and other metrics returned by authorized TikTok APIs.</li>
+          <li>Operational logs, live collection timestamps, sync run summaries, API error messages, and optional raw API responses shown in debug tools when you request troubleshooting.</li>
+        </ul>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">2. How We Use the Information</h2>
-          <p>We use the collected information only for the following purposes:</p>
-          <ul class="policy-list">
-            <li>To provide the app's features (such as displaying live video metrics, concurrent viewers, and insights).</li>
-            <li>If you are streaming our live game live feed.</li>
-            <li>To improve the functionality and performance of our app.</li>
-            <li>To ensure security and prevent unauthorized use.</li>
-          </ul>
-          <p>We do not sell, rent, or trade your information to third parties.</p>
-        </div>
+      <section class="legal-card">
+        <h2>3. How We Use Information</h2>
+        <p>We use connected account data only to provide the app features you request:</p>
+        <ul>
+          <li>Authenticate your connected social, YouTube, TikTok, Instagram, Facebook, and Google Sheets accounts.</li>
+          <li>Fetch live, recent, or date-range content and performance metrics for accounts you are authorized to manage.</li>
+          <li>Collect live viewer count snapshots for authorized Facebook Live videos and YouTube live broadcasts during live events.</li>
+          <li>Display live viewer counts in dashboards and preserve collection history for event reporting and troubleshooting.</li>
+          <li>Calculate reporting rows such as content date, platform, content type, link, reach, impressions, interactions, video views, and CTR.</li>
+          <li>Write or update those reporting rows in the Google Sheet and tabs you configure.</li>
+          <li>Refresh cached metric snapshots and scheduled sync runs so reports stay reasonably up to date while respecting platform API limits.</li>
+          <li>Debug failed syncs, permission issues, missing metrics, and platform API errors.</li>
+        </ul>
+        <p>
+          We do not sell, rent, broker, or trade platform data. We do not use platform data for
+          unrelated advertising, profiling, surveillance, or data brokerage.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">3. Data Sharing</h2>
-          <p>We may share your information only in the following cases:</p>
-          <ul class="policy-list">
-            <li><strong>With Facebook APIs:</strong> as required to fetch and display the data you requested.</li>
-            <li><strong>With service providers:</strong> who help us operate our app (e.g., hosting, database, analytics).</li>
-            <li><strong>As required by law:</strong> if we are legally required to disclose information.</li>
-          </ul>
-        </div>
+      <section class="legal-card">
+        <h2>4. Google and YouTube Data</h2>
+        <p>
+          If you connect Google Sheets or YouTube, the app uses Google APIs only to provide the
+          requested Sheet Sync, YouTube reporting, and YouTube live viewer count collection features.
+          Our use and transfer to any other app of information received from Google APIs will adhere to the
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+          including the Limited Use requirements.
+        </p>
+        <p>
+          YouTube data is accessed through YouTube API Services. By using YouTube-connected
+          features, you also agree to the
+          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms of Service</a>
+          and acknowledge the
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a>.
+          You can revoke this app's access from your
+          <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener noreferrer">Google security permissions</a>.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">4. Data Storage and Retention</h2>
-          <p>Your data is stored securely using <strong>Google Firestore</strong> (a very secured platform)</p>
-          <p>We retain your data only as long as necessary to provide the app's services.</p>
-          <p>You may request deletion of your data at any time (see "Your Rights" below).</p>
-        </div>
+      <section class="legal-card">
+        <h2>5. Sharing and Disclosure</h2>
+        <p>We share or transfer information only as needed to operate the service:</p>
+        <ul>
+          <li>To the social, Google, YouTube, TikTok, Facebook, Instagram, and Meta APIs you authorize us to call.</li>
+          <li>To the Google Sheet you configure, because the purpose of Sheet Sync is to write reporting data into that Sheet.</li>
+          <li>To cloud hosting, database, logging, and serverless infrastructure providers that help us run the app securely.</li>
+          <li>To authorized members of our team only when needed for support, security, troubleshooting, or compliance.</li>
+          <li>When required by law, legal process, or to protect the rights, safety, and security of users, platforms, or our service.</li>
+        </ul>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">5. Your Rights</h2>
-          <p>As a user, you have the right to:</p>
-          <ul class="policy-list">
-            <li>Access the information we have collected about you.</li>
-            <li>Request correction or deletion of your data.</li>
-            <li>Withdraw permissions you granted to the app via Facebook at any time from your Facebook Settings.</li>
-          </ul>
-        </div>
+      <section class="legal-card">
+        <h2>6. Storage, Retention, and Security</h2>
+        <p>
+          We store configuration, connected account references, tokens, cached metrics, sync history,
+          and operational logs in cloud services used to run the app. Secrets and tokens are treated
+          as confidential service data and are not displayed publicly.
+        </p>
+        <p>
+          We retain data only for as long as needed to provide the service, maintain reporting
+          history, comply with platform rules, troubleshoot sync issues, and meet legal obligations.
+          If you disconnect an account or request deletion, we will delete or de-identify data we no
+          longer need, subject to backups, security logs, legal requirements, and platform rules.
+        </p>
+        <p>
+          We use reasonable administrative, technical, and organizational safeguards to protect data
+          against unauthorized access, loss, misuse, or disclosure. No internet service can guarantee
+          perfect security.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">6. Security</h2>
-          <p>We take reasonable measures to protect your data from unauthorized access, loss, misuse, or disclosure.</p>
-        </div>
+      <section id="data-deletion" class="legal-card">
+        <h2>7. Data Deletion and Revocation</h2>
+        <p>You can request deletion of your app data at any time.</p>
+        <ol>
+          <li>Email <a href="mailto:yonefang@gamecastnetwork.com">yonefang@gamecastnetwork.com</a> with the subject "Data Deletion Request".</li>
+          <li>Include the connected account email or username, platform name, and the Google Sheet or workspace you want removed.</li>
+          <li>We will verify the request and delete or de-identify applicable data within a reasonable period, unless retention is required by law, security, or platform obligations.</li>
+        </ol>
+        <p>
+          For YouTube Authorized Data, after you revoke access or request deletion, we will delete
+          stored YouTube Authorized Data as soon as possible and within the time required by
+          YouTube API Services policies.
+        </p>
+        <p>You can also revoke platform access directly:</p>
+        <ul>
+          <li>For Facebook and Instagram, remove the app from your Facebook or Meta Business settings.</li>
+          <li>For Google and YouTube, remove access in <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener noreferrer">Google security permissions</a>.</li>
+          <li>For TikTok, remove access from your TikTok authorized apps or account settings.</li>
+        </ul>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">7. Children's Privacy</h2>
-          <p>Our app is not directed to children under 13, and we do not knowingly collect data from them.</p>
-        </div>
+      <section class="legal-card">
+        <h2>8. Your Choices and Rights</h2>
+        <p>
+          You may request access, correction, export, or deletion of your personal information where
+          required by applicable law. You may also disconnect accounts, stop scheduled sync, remove
+          selected accounts, or stop using the app at any time.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">8. Changes to This Policy</h2>
-          <p>We may update this Privacy Policy from time to time. Any changes will be posted at this page with a revised "Effective Date."</p>
-        </div>
+      <section class="legal-card">
+        <h2>9. Children</h2>
+        <p>
+          The app is intended for business and creator reporting. It is not directed to children
+          under 13, and we do not knowingly collect personal information from children under 13.
+        </p>
+      </section>
 
-        <div class="policy-section">
-          <h2 class="section-title">9. Contact Us</h2>
-          <p>If you have questions about this Privacy Policy, please contact us at:</p>
-          <div class="contact-info">
-            <span class="contact-label">Email:</span>
-            <a href="mailto:yonefang@gamecastnetwork.com" class="contact-link">yonefang@gamecastnetwork.com</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+      <section class="legal-card">
+        <h2>10. Changes to This Policy</h2>
+        <p>
+          We may update this Privacy Policy from time to time. Changes will be posted on this page
+          with an updated effective date. Continued use of the app after changes means you accept
+          the updated policy.
+        </p>
+      </section>
+
+      <section class="legal-card">
+        <h2>11. Contact</h2>
+        <p>
+          For privacy questions, platform review questions, or deletion requests, contact
+          <a href="mailto:yonefang@gamecastnetwork.com">yonefang@gamecastnetwork.com</a>.
+        </p>
+      </section>
+    </section>
+  </main>
 </template>
 
 <style lang="css" scoped>
-/* Dark Theme Styles for Privacy Policy */
-.privacy-container {
+.legal-page {
+  background: #0f1727;
+  color: #dbe7f5;
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  padding: 20px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 32px 18px 56px;
 }
 
-.privacy-card {
-  background: #1e1e2e;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  padding: 40px;
-  max-width: 900px;
-  width: 100%;
-  animation: slideIn 0.6s ease-out;
-  border: 1px solid #2d2d3f;
-  margin: 20px 0;
+.legal-shell {
+  margin: 0 auto;
+  max-width: 980px;
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.legal-hero,
+.legal-card {
+  background: #172239;
+  border: 1px solid #31415f;
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
 }
 
-.header-section {
-  text-align: center;
-  margin-bottom: 40px;
-  padding-bottom: 30px;
-  border-bottom: 2px solid #2d2d3f;
+.legal-hero {
+  margin-bottom: 18px;
+  padding: 34px;
 }
 
-.logo-section {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
+.eyebrow {
+  color: #38bdf8;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0 0 10px;
+  text-transform: uppercase;
 }
 
-.logo {
-  font-size: 3em;
-  margin-right: 15px;
-  animation: pulse 2s infinite;
-  filter: drop-shadow(0 0 10px rgba(102, 126, 234, 0.5));
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
-
-.main-title {
+h1,
+h2 {
   color: #ffffff;
-  font-size: 2.5em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h1 {
+  font-size: 2.4rem;
+}
+
+h2 {
+  font-size: 1.16rem;
+  margin-bottom: 12px;
+}
+
+.effective-date {
+  color: #9fb0c8;
   font-weight: 700;
-  margin: 0;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+  margin: 12px 0 14px;
 }
 
-.subtitle {
-  color: #a0a0a0;
-  font-size: 1.1em;
-  margin: 10px 0 0 0;
-  font-weight: 400;
+p,
+li {
+  color: #c3d0e2;
+  line-height: 1.68;
 }
 
-.content-section {
-  color: #b0b0b0;
-  line-height: 1.7;
+p {
+  margin: 0 0 12px;
 }
 
-.policy-intro {
-  background: #2d2d3f;
-  padding: 25px;
-  border-radius: 15px;
-  margin-bottom: 30px;
-  border: 1px solid #3d3d4f;
+ul,
+ol {
+  margin: 12px 0 0;
+  padding-left: 22px;
 }
 
-.policy-intro p {
-  color: #ffffff;
-  font-size: 1.1em;
-  margin: 0;
-  text-align: center;
-  font-weight: 500;
+li + li {
+  margin-top: 8px;
 }
 
-.policy-section {
-  margin-bottom: 35px;
-  padding: 25px;
-  background: #2d2d3f;
-  border-radius: 15px;
-  border: 1px solid #3d3d4f;
-  transition: all 0.3s ease;
-}
-
-.policy-section:hover {
-  background: #3d3d4f;
-  border-color: #667eea;
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.1);
-}
-
-.section-title {
-  color: #ffffff;
-  font-size: 1.4em;
-  font-weight: 600;
-  margin: 0 0 15px 0;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.policy-section p {
-  color: #b0b0b0;
-  font-size: 1em;
-  margin: 0 0 15px 0;
-  line-height: 1.6;
-}
-
-.policy-section p:last-child {
-  margin-bottom: 0;
-}
-
-.policy-list {
-  list-style: none;
-  padding: 0;
-  margin: 15px 0;
-}
-
-.policy-list li {
-  color: #b0b0b0;
-  padding: 8px 0 8px 25px;
-  position: relative;
-  font-size: 0.95em;
-  line-height: 1.5;
-}
-
-.policy-list li::before {
-  content: '•';
-  color: #667eea;
-  font-weight: bold;
-  position: absolute;
-  left: 0;
-  font-size: 1.2em;
-}
-
-.policy-list li strong {
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.contact-info {
-  background: #1e1e2e;
-  padding: 20px;
-  border-radius: 10px;
-  border: 1px solid #3d3d4f;
-  margin-top: 15px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.contact-label {
-  color: #a0a0a0;
-  font-weight: 500;
-  font-size: 0.95em;
-}
-
-.contact-link {
-  color: #667eea;
+a {
+  color: #7dd3fc;
+  font-weight: 800;
   text-decoration: none;
-  font-weight: 500;
-  transition: all 0.3s ease;
 }
 
-.contact-link:hover {
+a:hover {
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .privacy-container {
-    padding: 15px;
-  }
-  
-  .privacy-card {
-    padding: 25px;
-  }
-  
-  .main-title {
-    font-size: 2em;
-  }
-  
-  .policy-section {
-    padding: 20px;
-  }
-  
-  .section-title {
-    font-size: 1.3em;
-  }
-  
-  .contact-info {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px;
-  }
+.legal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
 }
 
-@media (max-width: 480px) {
-  .privacy-card {
+.legal-actions a {
+  background: #22314a;
+  border-radius: 8px;
+  color: #dbe7f5;
+  display: inline-flex;
+  min-height: 42px;
+  padding: 10px 14px;
+}
+
+.legal-card {
+  margin-bottom: 14px;
+  padding: 24px;
+}
+
+@media (max-width: 640px) {
+  .legal-page {
+    padding: 18px 12px 36px;
+  }
+
+  .legal-hero,
+  .legal-card {
     padding: 20px;
   }
-  
-  .main-title {
-    font-size: 1.8em;
-  }
-  
-  .logo {
-    font-size: 2.5em;
-  }
-  
-  .policy-section {
-    padding: 15px;
+
+  h1 {
+    font-size: 1.9rem;
   }
 }
 </style>

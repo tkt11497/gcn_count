@@ -704,6 +704,10 @@
                 </div>
                 <div class="footer-bottom">
                     <p>&copy; 2026 Game Cast Network. All rights reserved.</p>
+                    <div class="footer-links">
+                        <RouterLink to="/terms_of_service">Terms of Service</RouterLink>
+                        <RouterLink to="/privacy_policy">Privacy Policy</RouterLink>
+                    </div>
                 </div>
             </div>
         </footer>
@@ -3870,6 +3874,25 @@ section {
         text-align: center;
         color: $color-text-muted;
         font-size: 0.9rem;
+
+        .footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 14px;
+
+            a {
+                color: rgba(255,255,255,0.82);
+                font-weight: 600;
+                text-decoration: none;
+                transition: color 0.2s ease;
+
+                &:hover {
+                    color: $color-primary;
+                }
+            }
+        }
     }
 }
 
@@ -3886,4 +3909,3 @@ section {
     }
 }
 </style>
-

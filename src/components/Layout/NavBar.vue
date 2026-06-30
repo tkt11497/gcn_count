@@ -90,7 +90,16 @@
             active-class="nav-active"
           >
             <span class="nav-icon">📈</span>
-            <span class="nav-text">Privacy  & Policy</span>
+            <span class="nav-text">Privacy Policy</span>
+          </RouterLink>
+          <RouterLink
+            @click="showMobileNav = false"
+            to="/terms_of_service"
+            class="nav-link"
+            active-class="nav-active"
+          >
+            <span class="nav-icon">TS</span>
+            <span class="nav-text">Terms</span>
           </RouterLink>
         </div>
         <div class="navbar-end">
