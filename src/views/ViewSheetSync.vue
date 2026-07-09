@@ -5,7 +5,7 @@
         <p class="eyebrow">Social metrics automation</p>
         <h1>Google Sheet Sync</h1>
         <p class="subtitle">
-          Sync content performance and follower growth into one reporting workbook.
+          Choose workbook tabs, date ranges, accounts, then run both sheet tabs.
         </p>
       </div>
       <div class="status-panel">
@@ -19,6 +19,7 @@
             :class="{ active: !showSettings }"
             @click="showSettings = false"
           >
+            <span class="icon icon-basic" aria-hidden="true"></span>
             Basic
           </button>
           <button
@@ -27,104 +28,206 @@
             :class="{ active: showSettings }"
             @click="showSettings = true"
           >
+            <span class="icon icon-sliders" aria-hidden="true"></span>
             Advanced
           </button>
         </div>
       </div>
     </section>
 
-    <section v-if="!showSettings" class="basic-grid">
-      <form class="sync-panel basic-panel" @submit.prevent="saveConfig">
-        <div class="panel-title">
+    <section v-if="!showSettings" class="quick-sync-shell">
+      <form class="quick-sync-card" @submit.prevent="runSync('both')">
+        <div class="quick-sync-top">
           <div>
-            <h2>Basic Setup</h2>
-            <small>{{ form.sheetId ? 'Sheet connected to this configuration' : 'Add a Google Sheet before running sync' }}</small>
+            <p class="eyebrow">Basic sync</p>
+            <h2>
+              <span class="icon icon-sync" aria-hidden="true"></span>
+              Sheet sync setup
+            </h2>
           </div>
-          <span>{{ contentWindowLabel }}</span>
+          <span class="quick-state" :class="{ busy: busy }">{{ runningLabel }}</span>
         </div>
 
-        <div class="basic-workspace-grid">
-          <div class="sheet-fields">
-            <label class="sheet-id-field">
+        <div class="quick-sync-layout">
+          <div class="quick-settings-pane">
+            <div class="quick-section-heading">
+              <h3>
+                <span class="section-icon icon-sheet" aria-hidden="true"></span>
+                Workbook
+              </h3>
+              <span>{{ contentWindowLabel }}</span>
+            </div>
+
+            <label class="quick-field quick-sheet-id">
               Google Sheet ID
-              <input v-model.trim="form.sheetId" type="text" placeholder="1abcDEF..." autocomplete="off" />
+              <input
+                v-model.trim="form.sheetId"
+                type="text"
+                placeholder="1abcDEF..."
+                autocomplete="off"
+                required
+              />
             </label>
-            <div class="two-col compact-fields">
-              <label>
+
+            <div class="quick-tab-grid">
+              <label class="quick-field">
                 Content tab
-                <input v-model.trim="form.sheetTab" type="text" placeholder="Sheet1" />
+                <input v-model.trim="form.sheetTab" type="text" placeholder="Content" required />
               </label>
-              <label>
+
+              <label class="quick-field">
                 Follower tab
-                <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" />
+                <input v-model.trim="form.followerSheetTab" type="text" placeholder="Follower Growth" required />
               </label>
             </div>
-          </div>
 
-          <div class="date-card-stack">
-            <div class="date-group">
-              <div class="date-group-title">
-                <span>Content tab date duration</span>
-                <strong>{{ contentWindowLabel }}</strong>
-              </div>
-              <div class="two-col">
-                <label>
-                  Start date
-                  <input v-model="form.contentStartDate" type="date" />
-                </label>
-                <label>
-                  End date
-                  <input v-model="form.contentEndDate" type="date" />
-                </label>
-              </div>
+            <div class="quick-section-heading duration-heading">
+              <h3>
+                <span class="section-icon icon-calendar" aria-hidden="true"></span>
+                Date duration
+              </h3>
+              <span>Content and follower windows</span>
             </div>
 
-            <div class="date-group">
-              <div class="date-group-title">
-                <span>Follower tab date duration</span>
-                <strong>{{ followerWindowLabel }}</strong>
+            <div class="quick-duration-list">
+              <div class="quick-duration-row">
+                <div class="quick-duration-label">
+                  <strong>Content metrics</strong>
+                  <small>{{ contentWindowLabel }}</small>
+                </div>
+                <label class="quick-field">
+                  Start date
+                  <input v-model="form.contentStartDate" type="date" required />
+                </label>
+                <label class="quick-field">
+                  End date
+                  <input v-model="form.contentEndDate" type="date" required />
+                </label>
               </div>
-              <div class="follower-range-list">
-                <div
-                  v-for="(range, index) in form.followerDateRanges"
-                  :key="range.id || index"
-                  class="follower-range-row"
-                >
-                  <div class="follower-range-heading">
-                    <span>Duration {{ index + 1 }}</span>
+
+              <div class="quick-follower-toolbar">
+                <div class="quick-duration-label">
+                  <strong>Follower growth</strong>
+                  <small>{{ followerWindowLabel }}</small>
+                </div>
+                <button type="button" class="mini-btn add-range-btn" @click="addFollowerDateRange">
+                  <span class="icon icon-plus" aria-hidden="true"></span>
+                  Add duration
+                </button>
+              </div>
+
+              <div
+                v-for="(range, index) in form.followerDateRanges"
+                :key="range.id || index"
+                class="quick-duration-row quick-follower-row"
+              >
+                <div class="quick-duration-label">
+                  <div class="quick-range-label-row">
+                    <strong>Duration {{ index + 1 }}</strong>
                     <button
                       v-if="form.followerDateRanges.length > 1"
                       type="button"
                       class="mini-btn danger"
                       @click="removeFollowerDateRange(index)"
                     >
+                      <span class="icon icon-x" aria-hidden="true"></span>
                       Remove
                     </button>
                   </div>
-                  <div class="two-col">
-                    <label>
-                      Start date
-                      <input v-model="range.startDate" type="date" />
-                    </label>
-                    <label>
-                      End date
-                      <input v-model="range.endDate" type="date" />
-                    </label>
-                  </div>
+                  <small>{{ dateWindowLabel(range.startDate, range.endDate) }}</small>
                 </div>
+                <label class="quick-field">
+                  Start date
+                  <input v-model="range.startDate" type="date" required />
+                </label>
+                <label class="quick-field">
+                  End date
+                  <input v-model="range.endDate" type="date" required />
+                </label>
               </div>
-              <button type="button" class="mini-btn add-range-btn" @click="addFollowerDateRange">
-                Add duration
-              </button>
+            </div>
+          </div>
+
+          <div class="quick-accounts-pane">
+            <div class="quick-section-heading">
+              <h3>
+                <span class="section-icon icon-users" aria-hidden="true"></span>
+                Connected accounts
+              </h3>
+              <span>{{ accountSummary }}</span>
+            </div>
+
+            <div class="basic-account-stack">
+              <div
+                v-for="group in basicAccountGroups"
+                :key="group.key"
+                class="basic-platform-row"
+                :class="{ disabled: !form.enabledPlatforms[group.key] }"
+              >
+                <div class="basic-platform-head">
+                  <label class="basic-platform-toggle">
+                    <input v-model="form.enabledPlatforms[group.key]" type="checkbox" />
+                    <span class="platform-mark" :class="group.iconClass" aria-hidden="true">
+                      {{ group.shortLabel }}
+                    </span>
+                    <span>
+                      <strong>{{ group.label }}</strong>
+                      <small>{{ group.countLabel }}</small>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    class="mini-btn"
+                    :disabled="!group.accounts.length || !form.enabledPlatforms[group.key]"
+                    @click="toggleAllAccounts(group.key)"
+                  >
+                    <span
+                      class="icon"
+                      :class="allSelected(group.key) ? 'icon-x' : 'icon-check-all'"
+                      aria-hidden="true"
+                    ></span>
+                    {{ allSelected(group.key) ? 'Clear' : 'All' }}
+                  </button>
+                </div>
+
+                <div v-if="group.accounts.length" class="basic-account-options">
+                  <label
+                    v-for="account in group.accounts"
+                    :key="account.id"
+                    class="basic-account-option"
+                    :class="{ selected: form.selectedAccounts[group.key].includes(account.id) }"
+                  >
+                    <input
+                      v-model="form.selectedAccounts[group.key]"
+                      type="checkbox"
+                      :value="account.id"
+                      :disabled="!form.enabledPlatforms[group.key]"
+                    />
+                    <span>
+                      {{ accountDisplayName(account, group.key) }}
+                      <small>{{ accountDetailText(account, group.key) }}</small>
+                    </span>
+                  </label>
+                </div>
+                <p v-else class="empty-note">{{ group.emptyText }}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="actions quick-actions">
-          <button type="submit" :disabled="busy">Save Basic Setup</button>
-          <button type="button" class="secondary" :disabled="busy || !form.sheetId" @click="testSheet">Test Sheet</button>
-          <button type="button" class="ghost" :disabled="busy" @click="openSecretsModal">Set Backend Secrets</button>
-          <button type="button" class="ghost" @click="showSettings = true">Advanced</button>
+        <p v-if="message" class="message quick-message" :class="{ error: messageType === 'error' }">
+          {{ message }}
+        </p>
+
+        <div class="quick-sync-actions">
+          <button type="submit" class="quick-run-button" :disabled="busy">
+            <span class="icon icon-play" aria-hidden="true"></span>
+            {{ busy && busyTarget ? 'Running...' : 'Run Sync' }}
+          </button>
+          <button type="button" class="ghost" @click="showSettings = true">
+            <span class="icon icon-sliders" aria-hidden="true"></span>
+            Advanced
+          </button>
         </div>
       </form>
     </section>
@@ -269,7 +372,7 @@
       </section>
     </section>
 
-    <section class="sync-panel accounts-panel">
+    <section v-if="showSettings" class="sync-panel accounts-panel">
       <div class="panel-title">
         <div>
           <h2>Available Accounts</h2>
@@ -363,7 +466,7 @@
       <p class="hint">No selection means all connected accounts for that platform.</p>
     </section>
 
-    <section class="sync-panel controls-panel">
+    <section v-if="showSettings" class="sync-panel controls-panel">
       <div class="panel-title">
         <h2>Run Controls</h2>
         <span>{{ runningLabel }}</span>
@@ -548,6 +651,69 @@
       </div>
     </section>
 
+    <div v-if="showIssuePopup" class="modal-backdrop issue-backdrop" @click.self="closeIssuePopup">
+      <section class="issue-modal" role="dialog" aria-modal="true" aria-labelledby="sync-issues-title">
+        <div class="modal-header issue-header">
+          <div>
+            <p class="eyebrow">Sync needs attention</p>
+            <h2 id="sync-issues-title">{{ issuePopupTitle }}</h2>
+          </div>
+          <button type="button" class="ghost close-btn" @click="closeIssuePopup">Close</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="issue-summary">
+            <span>{{ syncIssues.length }} issue{{ syncIssues.length === 1 ? '' : 's' }}</span>
+            <span v-if="tokenIssueCount">{{ tokenIssueCount }} token/auth</span>
+            <span v-if="secretIssueCount">{{ secretIssueCount }} setup</span>
+          </div>
+
+          <div class="issue-list">
+            <article
+              v-for="issue in syncIssues"
+              :key="issue.id"
+              class="issue-card"
+              :class="{
+                token: issue.isTokenIssue,
+                warning: issue.kind === 'warning'
+              }"
+            >
+              <div class="issue-card-head">
+                <span class="issue-badge">{{ platformIssueLabel(issue.platform) }}</span>
+                <span v-if="issue.isTokenIssue" class="issue-token-badge">Token/auth</span>
+                <span v-if="issue.isSecretIssue" class="issue-secret-badge">Setup</span>
+              </div>
+              <strong>{{ issueTitle(issue) }}</strong>
+              <p>{{ issue.message }}</p>
+              <small v-if="issue.accountId">Account ID: {{ issue.accountId }}</small>
+              <div v-if="canActOnIssue(issue)" class="actions issue-actions">
+                <button
+                  v-if="canReconnectIssue(issue)"
+                  type="button"
+                  class="ghost"
+                  @click="reconnectIssue(issue)"
+                >
+                  {{ reconnectLabel(issue.platform) }}
+                </button>
+                <button
+                  v-if="issue.isSecretIssue"
+                  type="button"
+                  class="ghost"
+                  @click="openSecretsFromIssue"
+                >
+                  Backend Secrets
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div class="actions modal-actions">
+            <button type="button" class="ghost" @click="closeIssuePopup">Dismiss</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div v-if="showSecretsModal" class="modal-backdrop" @click.self="closeSecretsModal">
       <section class="secret-modal" role="dialog" aria-modal="true" aria-labelledby="backend-secrets-title">
         <div class="modal-header">
@@ -709,6 +875,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { auth, db } from '@/js/firebase'
 import {
   collection,
@@ -722,6 +889,7 @@ import {
 } from 'firebase/firestore'
 
 const CONFIG_ID = 'default'
+const router = useRouter()
 const CLOUD_FUNCTION_BASE_URL = 'https://us-central1-gcc-live-count.cloudfunctions.net'
 const TIKTOK_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackTikTok`
 const YOUTUBE_REDIRECT_URI = `${CLOUD_FUNCTION_BASE_URL}/oauthCallbackYouTube`
@@ -769,6 +937,8 @@ const secretStatusUpdatedAt = ref(null)
 const previewRows = ref([])
 const followerPreviewRows = ref([])
 const instagramDebugRows = ref([])
+const showIssuePopup = ref(false)
+const syncIssues = ref([])
 const youtubeAnalyticsDebug = ref(null)
 const youtubeAnalyticsDebugError = ref('')
 const youtubeAnalyticsDebugLimit = ref(50)
@@ -848,7 +1018,7 @@ const secrets = reactive({
 const latestRun = computed(() => runs.value[0] || null)
 const latestRunLabel = computed(() => latestRun.value?.status || 'No runs yet')
 const latestRunDetails = computed(() => {
-  if (!latestRun.value) return 'Save config, then run a preview.'
+  if (!latestRun.value) return 'No sync runs recorded.'
   return `${latestRun.value.rowsAppended || 0} appended, ${latestRun.value.rowsUpdated || 0} updated`
 })
 const runningLabel = computed(() => busy.value ? `Working ${busyTarget.value || ''}`.trim() : 'Ready')
@@ -915,6 +1085,51 @@ const followerWindowLabel = computed(() => {
     return dateWindowLabel(range.startDate, range.endDate)
   }
   return `${count} durations`
+})
+const basicAccountGroups = computed(() => [
+  {
+    key: 'facebook',
+    label: 'Facebook',
+    shortLabel: 'F',
+    iconClass: 'facebook',
+    countLabel: `${facebookPages.value.length} page${facebookPages.value.length === 1 ? '' : 's'}`,
+    accounts: facebookPages.value,
+    emptyText: 'No Facebook pages connected.'
+  },
+  {
+    key: 'instagram',
+    label: 'Instagram',
+    shortLabel: 'I',
+    iconClass: 'instagram',
+    countLabel: `${instagramAccounts.value.length} account${instagramAccounts.value.length === 1 ? '' : 's'}`,
+    accounts: instagramAccounts.value,
+    emptyText: 'No Instagram accounts connected.'
+  },
+  {
+    key: 'youtube',
+    label: 'YouTube',
+    shortLabel: 'YT',
+    iconClass: 'youtube',
+    countLabel: `${youtubeChannels.value.length} channel${youtubeChannels.value.length === 1 ? '' : 's'}`,
+    accounts: youtubeChannels.value,
+    emptyText: 'No YouTube channels connected.'
+  },
+  {
+    key: 'tiktok',
+    label: 'TikTok',
+    shortLabel: 'T',
+    iconClass: 'tiktok',
+    countLabel: `${tiktokAccounts.value.length} account${tiktokAccounts.value.length === 1 ? '' : 's'}`,
+    accounts: tiktokAccounts.value,
+    emptyText: 'No TikTok accounts connected.'
+  }
+])
+const tokenIssueCount = computed(() => syncIssues.value.filter((issue) => issue.isTokenIssue).length)
+const secretIssueCount = computed(() => syncIssues.value.filter((issue) => issue.isSecretIssue).length)
+const issuePopupTitle = computed(() => {
+  if (tokenIssueCount.value) return 'Reconnect Accounts'
+  if (secretIssueCount.value) return 'Backend Setup Required'
+  return 'Sync Issues'
 })
 
 async function authHeaders() {
@@ -1123,6 +1338,190 @@ function syncNoticeSuffix(result = {}) {
   ].filter(Boolean).join(' ')
 }
 
+let syncIssueId = 0
+
+function normalizeIssuePlatform(platform, message = '') {
+  const value = String(platform || '').toLowerCase()
+  const text = `${value} ${String(message || '').toLowerCase()}`
+  if (text.includes('facebook')) return 'facebook'
+  if (text.includes('instagram')) return 'instagram'
+  if (text.includes('youtube') || text.includes('google oauth')) return 'youtube'
+  if (text.includes('tiktok') || text.includes('tik tok')) return 'tiktok'
+  if (text.includes('sheet') || text.includes('service account') || text.includes('google sheets')) return 'sheets'
+  return value || 'sync'
+}
+
+function platformIssueLabel(platform) {
+  return {
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    youtube: 'YouTube',
+    tiktok: 'TikTok',
+    sheets: 'Google Sheets',
+    system: 'System',
+    sync: 'Sync'
+  }[platform] || String(platform || 'Sync')
+}
+
+function isTokenIssueMessage(message = '') {
+  const text = String(message || '').toLowerCase()
+  return [
+    'access token',
+    'authorization',
+    'expired',
+    'invalid_grant',
+    'invalid oauth',
+    'invalid token',
+    'missing instagram oauth token',
+    'missing tiktok token',
+    'missing youtube oauth token',
+    'oauth',
+    'permission',
+    'reconnect',
+    'refresh token',
+    'revoked',
+    'session',
+    'unauthorized'
+  ].some((pattern) => text.includes(pattern))
+}
+
+function isSecretIssueMessage(message = '') {
+  const text = String(message || '').toLowerCase()
+  return [
+    'api key',
+    'client id',
+    'client key',
+    'client secret',
+    'credentials',
+    'not configured',
+    'service account'
+  ].some((pattern) => text.includes(pattern))
+}
+
+function createSyncIssue(rawIssue = {}, kind = 'error') {
+  const message = rawIssue?.message || rawIssue?.error || String(rawIssue || 'Unknown sync issue')
+  const platform = normalizeIssuePlatform(rawIssue?.platform, message)
+  const isTokenIssue = isTokenIssueMessage(message)
+  return {
+    id: `sync-issue-${++syncIssueId}`,
+    kind,
+    platform,
+    accountId: rawIssue?.accountId || rawIssue?.account_id || '',
+    message,
+    isTokenIssue,
+    isSecretIssue: isSecretIssueMessage(message)
+  }
+}
+
+function issueDedupeKey(issue) {
+  if (issue.isTokenIssue) {
+    return [
+      'token',
+      issue.platform
+    ].join(':')
+  }
+  if (issue.isSecretIssue) {
+    return ['setup', issue.platform, issue.message.toLowerCase().replace(/\s+/g, ' ').slice(0, 80)].join(':')
+  }
+  return ['sync', issue.platform, issue.accountId, issue.message.toLowerCase().replace(/\s+/g, ' ').slice(0, 120)].join(':')
+}
+
+function dedupeIssues(issues = []) {
+  const byKey = new Map()
+  for (const issue of issues) {
+    const key = issueDedupeKey(issue)
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, issue)
+      continue
+    }
+    const existingScore = existing.message.length + (existing.accountId ? 20 : 0)
+    const issueScore = issue.message.length + (issue.accountId ? 20 : 0)
+    if (issueScore > existingScore) {
+      byKey.set(key, {
+        ...issue,
+        id: existing.id
+      })
+    }
+  }
+  return Array.from(byKey.values())
+}
+
+function issuesFromResult(result = {}) {
+  const errors = Array.isArray(result.errors) ? result.errors : []
+  const warnings = Array.isArray(result.warnings) ? result.warnings : []
+  return dedupeIssues([
+    ...errors.map((item) => createSyncIssue(item, 'error')),
+    ...warnings
+      .filter((item) => {
+        const message = item?.message || item
+        return isTokenIssueMessage(message) || isSecretIssueMessage(message)
+      })
+      .map((item) => createSyncIssue(item, 'warning'))
+  ])
+}
+
+function showIssues(issues = []) {
+  syncIssues.value = issues
+  showIssuePopup.value = issues.length > 0
+}
+
+function maybeOpenIssuePopup(result = {}) {
+  const issues = issuesFromResult(result)
+  if (issues.length) showIssues(issues)
+}
+
+function openIssuePopupFromError(error, platform = 'sync') {
+  showIssues([createSyncIssue({
+    platform,
+    message: error?.message || String(error || 'Request failed')
+  })])
+}
+
+function closeIssuePopup() {
+  showIssuePopup.value = false
+}
+
+function issueTitle(issue) {
+  if (issue.isSecretIssue) return `${platformIssueLabel(issue.platform)} setup issue`
+  if (issue.isTokenIssue) return `${platformIssueLabel(issue.platform)} connection issue`
+  return `${platformIssueLabel(issue.platform)} sync issue`
+}
+
+function canReconnectIssue(issue) {
+  return issue.isTokenIssue
+    && !issue.isSecretIssue
+    && ['facebook', 'instagram', 'youtube', 'tiktok'].includes(issue.platform)
+}
+
+function canActOnIssue(issue) {
+  return canReconnectIssue(issue) || issue.isSecretIssue
+}
+
+function reconnectLabel(platform) {
+  if (platform === 'facebook') return 'Reconnect Facebook'
+  if (platform === 'instagram') return 'Reconnect Instagram'
+  if (platform === 'youtube') return 'Reconnect YouTube'
+  if (platform === 'tiktok') return 'Reconnect TikTok'
+  return 'Reconnect'
+}
+
+async function reconnectIssue(issue) {
+  if (issue.platform === 'facebook') {
+    closeIssuePopup()
+    router.push('/register_gcn_sub_stream')
+    return
+  }
+  if (issue.platform === 'instagram') await connectInstagram()
+  if (issue.platform === 'youtube') await connectYouTube()
+  if (issue.platform === 'tiktok') await connectTikTok()
+}
+
+async function openSecretsFromIssue() {
+  closeIssuePopup()
+  await openSecretsModal()
+}
+
 function cleanSecretsPayload() {
   return Object.fromEntries(
     Object.entries(secrets).filter(([, value]) => String(value || '').trim())
@@ -1303,6 +1702,19 @@ function accountIds(platform) {
   return tiktokAccounts.value.map((item) => item.id)
 }
 
+function accountDisplayName(account, platform) {
+  if (platform === 'instagram') return account.displayName || account.username || account.accountId || account.id
+  if (platform === 'tiktok') return account.displayName || account.accountId || account.id
+  return account.name || account.id
+}
+
+function accountDetailText(account, platform) {
+  if (platform === 'youtube') {
+    return `${account.id}${account.connectedAs ? ` - ${account.connectedAs}` : ''}`
+  }
+  return account.accountId || account.id
+}
+
 function allSelected(platform) {
   const ids = accountIds(platform)
   const selected = form.selectedAccounts[platform] || []
@@ -1373,6 +1785,7 @@ async function testSheet() {
     setMessage(result.message || 'Sheet connection works.')
   } catch (error) {
     setMessage(error.message, 'error')
+    openIssuePopupFromError(error, 'sheets')
   } finally {
     busy.value = false
   }
@@ -1423,9 +1836,11 @@ async function previewSync(target = 'both') {
     const notices = syncNoticeSuffix(result)
     const errors = syncErrorText(result.errors)
     setMessage(`Preview ${runTargetLabel(normalizedTarget)} complete: ${previewMessage(result, normalizedTarget)}.${notices ? ` ${notices}` : ''}`, errors ? 'error' : 'info')
+    maybeOpenIssuePopup(result)
     await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
+    openIssuePopupFromError(error, normalizedTarget)
   } finally {
     busy.value = false
     busyTarget.value = ''
@@ -1448,11 +1863,13 @@ async function runSync(target = 'both') {
     const notices = syncNoticeSuffix(result)
     const errors = syncErrorText(result.errors)
     setMessage(`Sync ${runTargetLabel(normalizedTarget)} complete: ${runMessage(result, normalizedTarget)}.${notices ? ` ${notices}` : ''}`, errors ? 'error' : 'info')
+    maybeOpenIssuePopup(result)
     previewRows.value = []
     followerPreviewRows.value = []
     await Promise.all([loadRuns(), loadAccounts()])
   } catch (error) {
     setMessage(error.message, 'error')
+    openIssuePopupFromError(error, normalizedTarget)
   } finally {
     busy.value = false
     busyTarget.value = ''
@@ -1528,6 +1945,33 @@ onMounted(async () => {
     linear-gradient(90deg, #132319, #273444);
   color: #f8fafc;
   padding: 28px;
+  scrollbar-color: rgba(56, 189, 248, 0.7) rgba(15, 23, 39, 0.7);
+  scrollbar-width: thin;
+}
+
+.sheet-sync * {
+  scrollbar-color: rgba(56, 189, 248, 0.72) rgba(15, 23, 39, 0.62);
+  scrollbar-width: thin;
+}
+
+.sheet-sync *::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.sheet-sync *::-webkit-scrollbar-track {
+  background: rgba(15, 23, 39, 0.72);
+  border-radius: 999px;
+}
+
+.sheet-sync *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #38bdf8, #22c55e);
+  border: 2px solid rgba(15, 23, 39, 0.88);
+  border-radius: 999px;
+}
+
+.sheet-sync *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #7dd3fc, #4ade80);
 }
 
 .sync-header {
@@ -1578,10 +2022,15 @@ h2 {
 }
 
 .status-panel {
+  align-items: flex-end;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
+  text-align: right;
 }
 
 .status-label,
@@ -1599,20 +2048,25 @@ h2 {
 }
 
 .mode-switch {
-  background: #0f1727;
+  background: rgba(15, 23, 39, 0.72);
   border: 1px solid #2b3a55;
   border-radius: 8px;
   display: grid;
   gap: 4px;
   grid-template-columns: 1fr 1fr;
   margin-top: 14px;
+  max-width: 240px;
   padding: 4px;
   width: 100%;
 }
 
 .mode-choice {
   background: transparent;
+  align-items: center;
   color: #cbd5e1;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
   min-height: 34px;
   padding: 8px 10px;
 }
@@ -1622,12 +2076,21 @@ h2 {
   color: #06121b;
 }
 
-.basic-grid,
+.mode-choice:hover:not(:disabled) {
+  box-shadow: none;
+  transform: none;
+}
+
 .advanced-grid,
 .sync-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 18px;
+  margin: 0 auto 18px;
+  max-width: 1280px;
+}
+
+.quick-sync-shell {
   margin: 0 auto 18px;
   max-width: 1280px;
 }
@@ -1681,6 +2144,57 @@ textarea {
   width: 100%;
 }
 
+input:hover,
+textarea:hover {
+  border-color: #4a5f7e;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(84%) sepia(21%) saturate(639%) hue-rotate(176deg) brightness(98%);
+  opacity: 0.8;
+}
+
+input[type='checkbox'] {
+  appearance: none;
+  background: #0b1220;
+  border: 1px solid #516784;
+  border-radius: 5px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  height: 18px;
+  min-height: unset;
+  padding: 0;
+  place-items: center;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  width: 18px;
+}
+
+input[type='checkbox']::after {
+  border-bottom: 2px solid #04111f;
+  border-left: 2px solid #04111f;
+  content: '';
+  height: 5px;
+  margin-top: -2px;
+  transform: rotate(-45deg) scale(0);
+  transition: transform 0.14s ease;
+  width: 9px;
+}
+
+input[type='checkbox']:checked {
+  background: linear-gradient(135deg, #38bdf8, #22c55e);
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+input[type='checkbox']:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.5;
+}
+
 textarea {
   min-height: 140px;
   resize: vertical;
@@ -1703,46 +2217,9 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.basic-workspace-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.15fr);
-}
-
-.sheet-fields {
-  align-content: start;
-  display: grid;
-  gap: 14px;
-}
-
-.compact-fields label,
-.sheet-fields label {
-  margin-bottom: 0;
-}
-
-.date-card-stack {
-  display: grid;
-  gap: 14px;
-}
-
-.quick-sheet-panel {
-  margin-bottom: 18px;
-}
-
-.quick-sheet-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(260px, 1.4fr) minmax(160px, 0.8fr) minmax(180px, 0.8fr);
-}
-
+.quick-sheet-id input,
 .sheet-id-field input {
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-}
-
-.quick-actions {
-  border-top: 1px solid #2b3a55;
-  margin-top: 4px;
-  padding-top: 16px;
 }
 
 .tab-date-grid {
@@ -1802,9 +2279,17 @@ textarea:focus {
   margin-top: 12px;
 }
 
+.quick-follower-toolbar .add-range-btn {
+  margin-top: 0;
+}
+
 .mini-btn.danger {
   background: rgba(239, 68, 68, 0.18);
   color: #fecaca;
+}
+
+.mini-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.28);
 }
 
 .switch-row {
@@ -1866,11 +2351,25 @@ button {
   background: #22c55e;
   border: 0;
   border-radius: 8px;
+  align-items: center;
   color: #07130b;
   cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
   font-weight: 800;
+  justify-content: center;
   min-height: 42px;
   padding: 10px 16px;
+  transition: background 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+button:hover:not(:disabled) {
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button.secondary {
@@ -1886,6 +2385,607 @@ button.ghost {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.icon,
+.section-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 16px;
+  position: relative;
+  width: 16px;
+}
+
+.section-icon {
+  height: 18px;
+  width: 18px;
+}
+
+.icon-plus::before,
+.icon-plus::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: '';
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.icon-plus::before {
+  height: 2px;
+  width: 12px;
+}
+
+.icon-plus::after {
+  height: 12px;
+  width: 2px;
+}
+
+.icon-x::before,
+.icon-x::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: '';
+  height: 2px;
+  left: 2px;
+  position: absolute;
+  top: 7px;
+  width: 12px;
+}
+
+.icon-x::before {
+  transform: rotate(45deg);
+}
+
+.icon-x::after {
+  transform: rotate(-45deg);
+}
+
+.icon-play::before {
+  border-bottom: 6px solid transparent;
+  border-left: 10px solid currentColor;
+  border-top: 6px solid transparent;
+  content: '';
+  left: 4px;
+  position: absolute;
+  top: 2px;
+}
+
+.icon-check-all::before {
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: '';
+  height: 5px;
+  left: 2px;
+  position: absolute;
+  top: 5px;
+  transform: rotate(-45deg);
+  width: 9px;
+}
+
+.icon-check-all::after {
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: '';
+  height: 4px;
+  left: 8px;
+  opacity: 0.55;
+  position: absolute;
+  top: 4px;
+  transform: rotate(-45deg);
+  width: 7px;
+}
+
+.icon-basic {
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  box-shadow: inset 6px 0 0 transparent;
+}
+
+.icon-basic::before,
+.icon-basic::after {
+  background: currentColor;
+  content: '';
+  position: absolute;
+}
+
+.icon-basic::before {
+  height: 100%;
+  left: 6px;
+  top: 0;
+  width: 2px;
+}
+
+.icon-basic::after {
+  height: 2px;
+  left: 0;
+  top: 6px;
+  width: 100%;
+}
+
+.icon-sliders::before,
+.icon-sliders::after {
+  background: currentColor;
+  border-radius: 999px;
+  box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
+  content: '';
+  height: 2px;
+  left: 1px;
+  position: absolute;
+  top: 2px;
+  width: 14px;
+}
+
+.icon-sliders::after {
+  background: #172033;
+  box-shadow: 7px 5px 0 #172033, 3px 10px 0 #172033;
+  height: 4px;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+}
+
+.icon-sync {
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-radius: 999px;
+}
+
+.icon-sync::after {
+  border-left: 5px solid currentColor;
+  border-top: 5px solid transparent;
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 0;
+}
+
+.icon-sheet {
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.icon-sheet::before {
+  background: currentColor;
+  box-shadow: 0 5px 0 currentColor;
+  content: '';
+  height: 2px;
+  left: 3px;
+  opacity: 0.72;
+  position: absolute;
+  top: 5px;
+  width: 8px;
+}
+
+.icon-calendar {
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.icon-calendar::before {
+  background: currentColor;
+  content: '';
+  height: 2px;
+  left: 0;
+  position: absolute;
+  top: 4px;
+  width: 100%;
+}
+
+.icon-calendar::after {
+  background: currentColor;
+  box-shadow: 5px 0 0 currentColor, 10px 0 0 currentColor;
+  content: '';
+  height: 2px;
+  left: 3px;
+  position: absolute;
+  top: 10px;
+  width: 2px;
+}
+
+.icon-users::before,
+.icon-users::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: '';
+  position: absolute;
+}
+
+.icon-users::before {
+  height: 7px;
+  left: 5px;
+  top: 2px;
+  width: 7px;
+}
+
+.icon-users::after {
+  border-radius: 8px 8px 4px 4px;
+  height: 7px;
+  left: 2px;
+  top: 10px;
+  width: 14px;
+}
+
+.quick-sync-card {
+  color: #f8fafc;
+  display: grid;
+  gap: 0;
+  background:
+    linear-gradient(180deg, rgba(23, 32, 51, 0.68), rgba(15, 23, 39, 0.42));
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(2, 6, 23, 0.22);
+  padding: 22px 28px;
+}
+
+.quick-sync-top {
+  align-items: center;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.58);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 0;
+  padding: 0 0 18px;
+}
+
+.quick-sync-top h2 {
+  align-items: center;
+  color: #f8fafc;
+  display: inline-flex;
+  font-size: 1.25rem;
+  gap: 10px;
+}
+
+.quick-sync-top h2 .icon {
+  color: #7dd3fc;
+}
+
+.quick-state {
+  align-items: center;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(125, 211, 252, 0.34);
+  border-radius: 999px;
+  color: #bae6fd;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 7px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.quick-state::before {
+  background: #38bdf8;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
+  content: '';
+  height: 7px;
+  width: 7px;
+}
+
+.quick-state.busy {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(134, 239, 172, 0.42);
+  color: #bbf7d0;
+}
+
+.quick-state.busy::before {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+}
+
+.quick-sync-layout {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+}
+
+.quick-settings-pane,
+.quick-accounts-pane {
+  padding-top: 20px;
+}
+
+.quick-accounts-pane {
+  border-left: 1px solid rgba(71, 85, 105, 0.58);
+  padding-left: 28px;
+}
+
+.quick-section-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.quick-section-heading h3 {
+  align-items: center;
+  color: #f8fafc;
+  display: inline-flex;
+  font-size: 0.98rem;
+  gap: 8px;
+  margin: 0;
+}
+
+.quick-section-heading h3 .section-icon {
+  color: #7dd3fc;
+}
+
+.quick-section-heading span {
+  color: #99a8bc;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.quick-tab-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.duration-heading {
+  border-top: 1px solid rgba(71, 85, 105, 0.58);
+  margin-top: 22px;
+  padding-top: 18px;
+}
+
+.quick-duration-list {
+  display: grid;
+  gap: 0;
+}
+
+.quick-duration-row {
+  align-items: end;
+  border-top: 1px solid rgba(43, 58, 85, 0.72);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(160px, 0.8fr) repeat(2, minmax(150px, 1fr));
+  padding: 14px 0;
+}
+
+.quick-duration-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.quick-follower-toolbar {
+  align-items: center;
+  border-top: 1px solid rgba(43, 58, 85, 0.72);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 0;
+}
+
+.quick-follower-row {
+  border-left: 2px solid rgba(56, 189, 248, 0.24);
+  padding-left: 14px;
+}
+
+.quick-duration-label {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 5px;
+}
+
+.quick-follower-toolbar .quick-duration-label {
+  padding-bottom: 0;
+}
+
+.quick-range-label-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.quick-duration-label strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+}
+
+.quick-duration-label small {
+  color: #99a8bc;
+  font-size: 0.78rem;
+}
+
+.quick-field {
+  color: #dbe7f5;
+  margin-bottom: 0;
+}
+
+.quick-field input {
+  background: #0f1727;
+  border-color: #34445f;
+  color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.quick-field input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.basic-account-stack {
+  border-top: 1px solid rgba(71, 85, 105, 0.58);
+  display: grid;
+  gap: 0;
+  max-height: 540px;
+  overflow: auto;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
+}
+
+.basic-account-stack::-webkit-scrollbar {
+  width: 12px;
+}
+
+.basic-account-stack::-webkit-scrollbar-track {
+  background: rgba(10, 16, 28, 0.92);
+  border-left: 1px solid rgba(71, 85, 105, 0.34);
+  border-radius: 999px;
+}
+
+.basic-account-stack::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #38bdf8, #22c55e);
+  border: 3px solid rgba(10, 16, 28, 0.92);
+  border-radius: 999px;
+}
+
+.basic-account-stack::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #7dd3fc, #4ade80);
+}
+
+.basic-platform-row {
+  border-bottom: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 8px;
+  padding: 14px 8px;
+  transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+.basic-platform-row:hover {
+  background: rgba(56, 189, 248, 0.045);
+}
+
+.basic-platform-row.disabled {
+  opacity: 0.62;
+}
+
+.basic-platform-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.basic-platform-toggle {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.platform-mark {
+  align-items: center;
+  border-radius: 8px;
+  color: #f8fafc;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  letter-spacing: 0;
+  width: 28px;
+}
+
+.platform-mark.facebook {
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+}
+
+.platform-mark.instagram {
+  background: linear-gradient(135deg, #f97316, #ec4899);
+}
+
+.platform-mark.youtube {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+}
+
+.platform-mark.tiktok {
+  background: linear-gradient(135deg, #14b8a6, #475569);
+}
+
+.basic-platform-toggle input,
+.basic-account-option input {
+  accent-color: #38bdf8;
+  height: 18px;
+  min-height: unset;
+  width: 18px;
+}
+
+.basic-platform-toggle span,
+.basic-account-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.basic-platform-toggle strong {
+  color: #f8fafc;
+}
+
+.basic-platform-toggle small,
+.basic-account-option small {
+  color: #99a8bc;
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basic-account-options {
+  display: grid;
+  gap: 0;
+  margin-top: 10px;
+}
+
+.basic-account-option {
+  align-items: flex-start;
+  border-top: 1px solid rgba(71, 85, 105, 0.34);
+  border-radius: 6px;
+  display: flex;
+  gap: 9px;
+  margin-bottom: 0;
+  padding: 9px 8px;
+  transition: background 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.basic-account-option:hover {
+  background: rgba(148, 163, 184, 0.055);
+}
+
+.basic-account-option.selected {
+  background: rgba(56, 189, 248, 0.08);
+  border-top-color: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 3px 0 0 #38bdf8;
+}
+
+.quick-sync-actions {
+  align-items: center;
+  border-top: 1px solid #2b3a55;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.quick-run-button {
+  background: #22c55e;
+  color: #07130b;
+  min-width: 150px;
+  box-shadow: 0 14px 30px rgba(34, 197, 94, 0.18);
+}
+
+.quick-run-button:hover:not(:disabled) {
+  background: #4ade80;
+}
+
+.quick-sync-actions .ghost {
+  background: #22314a;
+  color: #dbe7f5;
+}
+
+.quick-sync-actions .ghost:hover:not(:disabled),
+.mini-btn:hover:not(:disabled) {
+  background: #2a3b58;
+}
+
+.quick-message {
+  margin-top: 18px;
 }
 
 .secret-status-list {
@@ -2229,6 +3329,102 @@ th {
   width: min(980px, 100%);
 }
 
+.issue-modal {
+  background: #172033;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+  color: #f8fafc;
+  max-height: min(820px, calc(100vh - 44px));
+  max-width: 860px;
+  overflow: hidden;
+  width: min(860px, 100%);
+}
+
+.issue-header {
+  background: linear-gradient(90deg, rgba(127, 29, 29, 0.32), rgba(15, 23, 42, 0));
+}
+
+.issue-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue-summary span,
+.issue-badge,
+.issue-token-badge,
+.issue-secret-badge {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+
+.issue-summary span {
+  background: #0f1727;
+  color: #cbd5e1;
+}
+
+.issue-list {
+  display: grid;
+  gap: 12px;
+}
+
+.issue-card {
+  background: #0f1727;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+}
+
+.issue-card.warning {
+  border-color: rgba(250, 204, 21, 0.42);
+}
+
+.issue-card-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue-badge {
+  background: #22314a;
+  color: #dbe7f5;
+}
+
+.issue-token-badge {
+  background: rgba(56, 189, 248, 0.16);
+  color: #bae6fd;
+}
+
+.issue-secret-badge {
+  background: rgba(250, 204, 21, 0.16);
+  color: #fef3c7;
+}
+
+.issue-card strong {
+  color: #f8fafc;
+}
+
+.issue-card p {
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+
+.issue-card small {
+  color: #99a8bc;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  overflow-wrap: anywhere;
+}
+
+.issue-actions {
+  margin-top: 2px;
+}
+
 .modal-header {
   align-items: center;
   border-bottom: 1px solid #2b3a55;
@@ -2292,16 +3488,42 @@ th {
 
   .sync-header,
   .sync-grid,
-  .basic-workspace-grid,
+  .quick-sync-layout,
+  .quick-tab-grid,
+  .quick-duration-row,
   .advanced-schedule-grid,
   .advanced-sheet-grid,
   .platform-grid,
   .accounts-grid,
   .run-control-row,
   .two-col,
-  .quick-sheet-grid,
   .existing-secrets .secret-status-list {
     grid-template-columns: 1fr;
+  }
+
+  .status-panel {
+    align-items: stretch;
+    text-align: left;
+  }
+
+  .mode-switch {
+    max-width: none;
+  }
+
+  .quick-accounts-pane {
+    border-left: 0;
+    border-top: 1px solid #2b3a55;
+    padding-left: 0;
+  }
+
+  .quick-sync-top,
+  .quick-sync-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quick-sync-actions button {
+    width: 100%;
   }
 
   .modal-backdrop {
@@ -2310,6 +3532,10 @@ th {
   }
 
   .secret-modal {
+    max-height: calc(100vh - 24px);
+  }
+
+  .issue-modal {
     max-height: calc(100vh - 24px);
   }
 }
